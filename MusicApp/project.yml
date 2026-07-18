@@ -1,0 +1,63 @@
+name: MusicApp
+options:
+  bundleIdPrefix: com.musicapp
+  deploymentTarget:
+    iOS: "16.0"
+  xcodeVersion: "15.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    TARGETED_DEVICE_FAMILY: "1"
+
+targets:
+  MusicApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Core
+      - path: Modules
+      - path: UI
+      - path: Utilities
+      - path: Resources
+    settings:
+      base:
+        INFOPLIST_FILE: ""
+        PRODUCT_BUNDLE_IDENTIFIER: com.musicapp.player
+        PRODUCT_NAME: MusicApp
+        CODE_SIGN_STYLE: Manual
+        DEVELOPMENT_TEAM: ""
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_REQUIRED: NO
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    dependencies:
+      - package: GRDB
+        product: GRDB
+      - package: Kingfisher
+        product: Kingfisher
+    info:
+      path: Info.plist
+      properties:
+        UIBackgroundModes:
+          - audio
+        NSAppleMusicUsageDescription: "需要访问您的音乐库以播放本地音乐文件"
+        NSDocumentsFolderUsageDescription: "需要访问文档目录以扫描音乐文件"
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIRequiresFullScreen: true
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        CFBundleDisplayName: "MusicApp"
+        LSRequiresIPhoneOS: true
+        UIApplicationSupportsIndirectInputEvents: true
+        UILaunchStoryboardName: ""
+
+packages:
+  GRDB:
+    url: https://github.com/groue/GRDB.swift.git
+    from: "6.29.0"
+  Kingfisher:
+    url: https://github.com/onevcat/Kingfisher.git
+    from: "7.12.0"
