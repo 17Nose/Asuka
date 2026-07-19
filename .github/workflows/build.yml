@@ -1,4 +1,34 @@
-     - name: Build app
+name: Build iOS App
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build IPA
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: |
+          xcodegen generate
+          echo "✅ Xcode project generated"
+
+      - name: Resolve package dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project MusicApp.xcodeproj \
+            -scheme MusicApp
+
+      - name: Build app
         run: |
           xcodebuild build \
             -project MusicApp.xcodeproj \
@@ -12,10 +42,25 @@
             CODE_SIGNING_ALLOWED=NO \
             DEVELOPMENT_TEAM="" \
             ONLY_ACTIVE_ARCH=NO 2>&1 | tee build.log
-        continue-on-error: true
 
       - name: Show build errors
-        if: always()
         run: |
           echo "=== BUILD ERRORS ==="
-          grep -E "error:|warning:" build.log | head -30 || echo "No errors found in log"
+          grep -E "error:" build.log | head -30 || echo "No errors found"
+
+      - name: Create IPA
+        run: |
+          APP_PATH=$(find ./DerivedData -name "MusicApp.app" -type d | head -1)
+          echo "App found at: $APP_PATH"
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -r MusicApp.ipa Payload
+          rm -rf Payload
+          echo "✅ IPA created: $(ls -lh MusicApp.ipa | awk '{print $5}')"
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: MusicApp-Unsigned
+          path: MusicApp.ipa
+          retention-days: 30
