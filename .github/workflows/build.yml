@@ -28,35 +28,45 @@ jobs:
             -project MusicApp.xcodeproj \
             -scheme MusicApp
 
-      - name: Build app
+      - name: Archive app
         run: |
-          xcodebuild build \
+          xcodebuild archive \
             -project MusicApp.xcodeproj \
             -scheme MusicApp \
             -configuration Debug \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -derivedDataPath ./DerivedData \
+            -archivePath ./MusicApp.xcarchive \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             DEVELOPMENT_TEAM="" \
-            ONLY_ACTIVE_ARCH=NO 2>&1 | tee build.log
+            ONLY_ACTIVE_ARCH=NO \
+            SKIP_INSTALL=NO
 
-      - name: Show build errors
+      - name: Verify archive
         run: |
-          echo "=== BUILD ERRORS ==="
-          grep -E "error:" build.log | head -30 || echo "No errors found"
+          echo "Archive contents:"
+          ls -la MusicApp.xcarchive/Products/Applications/
+          echo ""
+          echo "App contents:"
+          APP_PATH=$(find MusicApp.xcarchive -name "*.app" -type d | head -1)
+          ls -la "$APP_PATH"
+          echo ""
+          echo "Executable check:"
+          ls -la "$APP_PATH/MusicApp" 2>/dev/null && file "$APP_PATH/MusicApp" || echo "WARNING: No MusicApp binary!"
 
       - name: Create IPA
         run: |
-          APP_PATH=$(find ./DerivedData -name "MusicApp.app" -type d | head -1)
-          echo "App found at: $APP_PATH"
+          APP_PATH=$(find MusicApp.xcarchive -name "*.app" -type d | head -1)
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
           zip -r MusicApp.ipa Payload
           rm -rf Payload
           echo "✅ IPA created: $(ls -lh MusicApp.ipa | awk '{print $5}')"
+          echo ""
+          echo "IPA contents:"
+          unzip -l MusicApp.ipa | head -20
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
