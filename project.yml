@@ -10,7 +10,7 @@ targets:
     platform: iOS
     sources:
       - App
-      - Core  
+      - Core
       - Modules
       - UI
       - Utilities
@@ -19,11 +19,24 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.musicapp.player
         CODE_SIGN_STYLE: Manual
         CODE_SIGNING_REQUIRED: NO
+        GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - package: GRDB
         product: GRDB
       - package: Kingfisher
         product: Kingfisher
+    info:
+      properties:
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UIBackgroundModes:
+          - audio
+        NSAppleMusicUsageDescription: "需要访问您的音乐库"
+        NSDocumentsFolderUsageDescription: "需要访问文档目录"
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        CFBundleDisplayName: "MusicApp"
 
 packages:
   GRDB:
