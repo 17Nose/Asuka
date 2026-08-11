@@ -21,10 +21,7 @@ jobs:
         run: xcodegen generate
 
       - name: Resolve packages
-        run: |
-          xcodebuild -resolvePackageDependencies \
-            -project MusicApp.xcodeproj \
-            -scheme MusicApp
+        run: xcodebuild -resolvePackageDependencies -project MusicApp.xcodeproj -scheme MusicApp
 
       - name: Build app
         run: |
@@ -39,41 +36,21 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             DEVELOPMENT_TEAM="" \
-            ONLY_ACTIVE_ARCH=NO
-
-      - name: Verify and fix binary
-        run: |
-          APP_PATH=$(find ./DerivedData -name "MusicApp.app" -type d | head -1)
-          echo "App bundle: $APP_PATH"
-          echo ""
-          echo "=== Contents ==="
-          ls -la "$APP_PATH/"
-          echo ""
-          echo "=== Info.plist CFBundleExecutable ==="
-          EXEC=$(/usr/libexec/PlistBuddy -c "Print CFBundleExecutable" "$APP_PATH/Info.plist" 2>/dev/null || echo "NOT FOUND")
-          echo "Expected executable: $EXEC"
-          echo ""
-          if [ -f "$APP_PATH/$EXEC" ]; then
-            echo "✅ Binary exists: $(file "$APP_PATH/$EXEC")"
-          else
-            echo "❌ Missing binary: $APP_PATH/$EXEC"
-            BIN=$(find ./DerivedData/Build -name "$EXEC" -type f 2>/dev/null | head -1)
-            if [ -n "$BIN" ]; then
-              cp "$BIN" "$APP_PATH/$EXEC"
-              echo "✅ Copied from: $BIN"
-            fi
-          fi
+            ONLY_ACTIVE_ARCH=NO 2>&1 | tail -50
 
       - name: Create IPA
+        if: always()
         run: |
-          APP_PATH=$(find ./DerivedData -name "MusicApp.app" -type d | head -1)
-          mkdir -p Payload
-          cp -R "$APP_PATH" Payload/
-          zip -r MusicApp.ipa Payload
-          rm -rf Payload
-          echo "✅ Done: $(ls -lh MusicApp.ipa | awk '{print $5}')"
+          APP=$(find ./DerivedData -name "MusicApp.app" -type d | head -1)
+          if [ -n "$APP" ]; then
+            mkdir -p Payload
+            cp -R "$APP" Payload/
+            zip -r MusicApp.ipa Payload
+            echo "✅ Done: $(ls -lh MusicApp.ipa | awk '{print $5}')"
+          fi
 
       - name: Upload IPA
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: MusicApp-Unsigned
