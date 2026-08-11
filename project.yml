@@ -16,7 +16,6 @@ targets:
       - Utilities
     settings:
       base:
-        INFOPLIST_FILE: "Info.plist"
         PRODUCT_BUNDLE_IDENTIFIER: com.musicapp.player
         CODE_SIGN_STYLE: Manual
         CODE_SIGNING_REQUIRED: NO
