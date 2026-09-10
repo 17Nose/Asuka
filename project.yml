@@ -14,6 +14,11 @@ targets:
       - path: Modules
       - path: UI
       - path: Utilities
+      # 内置音乐：作为「文件夹引用」整体拷入 app bundle，
+      # 保留 Music/ 子目录结构，App 内按 Bundle/Resources/Music 查找
+      - path: Resources/Music
+        type: folder
+        buildPhase: resources
     settings:
       base:
         SWIFT_VERSION: "5.9"
@@ -26,6 +31,10 @@ targets:
         INFOPLIST_KEY_UIBackgroundModes: "audio"
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait"
         INFOPLIST_KEY_NSAppleMusicUsageDescription: "需要访问您的音乐库以播放本地音乐文件"
+
+        # 文件共享：让 App 的 Documents 目录出现在「文件」App / Finder / 爱思助手中
+        INFOPLIST_KEY_UIFileSharingEnabled: "YES"
+        INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: "YES"
 
         ENABLE_DEBUG_DYLIB: "NO"
         ENABLE_PREVIEWS: "NO"

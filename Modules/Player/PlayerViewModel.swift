@@ -19,6 +19,7 @@ final class PlayerViewModel: ObservableObject {
     @Published var recentSongs: [Song] = []
     @Published var isLoading = false
     @Published var isScanning = false
+    @Published var isImporting = false
     @Published var scanProgress: Double = 0
     @Published var errorMessage: String?
 
@@ -185,6 +186,50 @@ final class PlayerViewModel: ObservableObject {
         guard let repo = repository else { return }
         try? repo.delete(song.id)
         allSongs.removeAll { $0.id == song.id }
+    }
+
+    // MARK: - 导入外部文件
+
+    /// 把外部音频文件复制进 App 沙盒，然后重新扫描
+    /// - Parameter urls: 来自「文件」App / AirDrop / 分享面板的文件 URL
+    func importFiles(from urls: [URL]) async {
+        let fileManager = FileManager.default
+        guard let documents = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return
+        }
+
+        isImporting = true
+        var importedCount = 0
+        var failedNames: [String] = []
+
+        for url in urls {
+            // 沙盒外的文件需要申请访问权限
+            let needsScope = url.startAccessingSecurityScopedResource()
+            defer { if needsScope { url.stopAccessingSecurityScopedResource() } }
+
+            let destination = documents.appendingPathComponent(url.lastPathComponent)
+            do {
+                // 同名文件直接覆盖，避免出现重复条目
+                if fileManager.fileExists(atPath: destination.path) {
+                    try fileManager.removeItem(at: destination)
+                }
+                try fileManager.copyItem(at: url, to: destination)
+                importedCount += 1
+            } catch {
+                failedNames.append(url.lastPathComponent)
+                print("❌ 导入失败 \(url.lastPathComponent): \(error.localizedDescription)")
+            }
+        }
+
+        isImporting = false
+
+        if !failedNames.isEmpty {
+            errorMessage = "\(failedNames.count) 个文件导入失败"
+        }
+
+        if importedCount > 0 {
+            await scanFiles()
+        }
     }
 
     // MARK: - 搜索

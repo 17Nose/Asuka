@@ -99,6 +99,37 @@ jobs:
             exit 1
           fi
 
+          echo ""
+          echo "=== Info.plist 功能校验 ==="
+          PLIST_FAIL=0
+          check_key() {
+            local value
+            value=$(/usr/libexec/PlistBuddy -c "Print :$1" "$APP_PATH/Info.plist" 2>/dev/null | tr '\n' ' ')
+            if [ -n "$value" ]; then
+              echo "✅ $1 = $value"
+            else
+              echo "❌ $1 缺失"
+              PLIST_FAIL=1
+            fi
+          }
+          check_key UIFileSharingEnabled
+          check_key LSSupportsOpeningDocumentsInPlace
+          check_key UIBackgroundModes
+
+          echo ""
+          echo "=== 内置音乐目录 ==="
+          if [ -d "$APP_PATH/Music" ]; then
+            echo "✅ Music 目录已打包："
+            ls -la "$APP_PATH/Music" | head -20
+          else
+            echo "⚠️ 无内置 Music 目录（Resources/Music 为空时属正常）"
+          fi
+
+          if [ "$PLIST_FAIL" != "0" ]; then
+            echo "❌ Info.plist 缺少必要配置，文件共享将不可用"
+            exit 1
+          fi
+
       - name: Create IPA
         run: |
           APP_PATH="./build/MusicApp.xcarchive/Products/Applications/MusicApp.app"

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// 音乐库主界面（增强版：视差滚动 + 动画头部 + 搜索动画 + 主题支持）
 struct LibraryView: View {
@@ -8,6 +9,8 @@ struct LibraryView: View {
     @State private var isSearching = false
     @State private var headerOffset: CGFloat = 0
     @State private var showScanAnimation = false
+    @State private var showImporter = false
+    @State private var importResultMessage: String?
 
     enum LibraryTab: String, CaseIterable {
         case recommend = "推荐"
@@ -108,11 +111,59 @@ struct LibraryView: View {
                                 .foregroundColor(theme.textPrimary)
                         }
 
+                        // 导入本地文件
+                        Button(action: {
+                            HapticStyle.light.trigger()
+                            showImporter = true
+                        }) {
+                            Image(systemName: "plus.circle")
+                                .font(.system(size: 16))
+                                .foregroundColor(theme.textPrimary)
+                        }
+                        .buttonStyle(BouncyButtonStyle(scale: 0.85))
+                        .disabled(viewModel.isImporting)
+
                         // 扫描按钮
                         scanButton
                     }
                 }
             }
+            .fileImporter(
+                isPresented: $showImporter,
+                allowedContentTypes: [.audio, .mp3, .mpeg4Audio, .mpeg4Movie, .wav, .aiff, .item],
+                allowsMultipleSelection: true
+            ) { result in
+                handleImport(result)
+            }
+            .alert("导入完成", isPresented: Binding(
+                get: { importResultMessage != nil },
+                set: { if !$0 { importResultMessage = nil } }
+            )) {
+                Button("好", role: .cancel) { importResultMessage = nil }
+            } message: {
+                Text(importResultMessage ?? "")
+            }
+        }
+    }
+
+    // MARK: - 处理导入
+
+    private func handleImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard !urls.isEmpty else { return }
+            Task {
+                await viewModel.importFiles(from: urls)
+                if let error = viewModel.errorMessage {
+                    importResultMessage = error
+                    viewModel.errorMessage = nil
+                } else {
+                    importResultMessage = "已导入 \(urls.count) 个文件"
+                }
+            }
+
+        case .failure(let error):
+            importResultMessage = "导入失败：\(error.localizedDescription)"
         }
     }
 

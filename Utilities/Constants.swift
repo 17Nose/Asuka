@@ -7,9 +7,9 @@ enum Constants {
     static let appName = "MusicApp"
     static let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
 
-    /// 支持的音频格式
+    /// 支持的音频格式（m4a / mp4 同为 MP4 容器，AVFoundation 可播放其音轨）
     static let supportedAudioExtensions = [
-        "mp3", "flac", "wav", "m4a", "aac",
+        "mp3", "m4a", "mp4", "flac", "wav", "aac",
         "wma", "ogg", "aiff", "alac", "opus"
     ]
 

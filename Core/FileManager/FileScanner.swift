@@ -1,30 +1,51 @@
 import Foundation
 import AVFoundation
 
-/// 音频文件扫描器 — 扫描设备本地音频文件
+/// 音频文件扫描器 — 扫描 App 内置音乐 + 用户导入的音乐
 final class FileScanner: ObservableObject {
     @Published var isScanning = false
     @Published var progress: Double = 0
     @Published var scannedCount = 0
 
     /// 支持的音频格式
+    /// 注：m4a / mp4 都是 MP4 容器；AVFoundation 能正常播放其中的音轨
     static let supportedExtensions: Set<String> = [
-        "mp3", "flac", "wav", "m4a", "aac",
+        "mp3", "m4a", "mp4", "flac", "wav", "aac",
         "wma", "ogg", "aiff", "alac", "opus"
     ]
 
-    /// 扫描目录列表
-    private let scanDirectories: [URL]
+    /// App 内置音乐目录名（对应仓库 Resources/Music，构建时整体拷入 bundle）
+    static let bundledMusicFolderName = "Music"
+
+    /// 调用方自定义的扫描目录（默认 nil，走标准目录）
+    private let customDirectories: [URL]?
 
     init(scanDirectories: [URL]? = nil) {
-        if let dirs = scanDirectories {
-            self.scanDirectories = dirs
-        } else {
-            // 默认扫描 Documents 和 Music 目录
-            let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-            let music = FileManager.default.urls(for: .musicDirectory, in: .userDomainMask).first ?? documents
-            self.scanDirectories = [documents, music]
+        self.customDirectories = scanDirectories
+    }
+
+    /// 实际要扫描的目录列表
+    var scanDirectories: [URL] {
+        if let custom = customDirectories {
+            return custom
         }
+
+        var dirs: [URL] = []
+
+        // 1. App 内置音乐（随 IPA 打包，只读）
+        if let resourceURL = Bundle.main.resourceURL {
+            let bundled = resourceURL.appendingPathComponent(Self.bundledMusicFolderName)
+            if FileManager.default.fileExists(atPath: bundled.path) {
+                dirs.append(bundled)
+            }
+        }
+
+        // 2. 用户导入的音乐（文件 App / 爱思助手 / 应用内导入）
+        if let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            dirs.append(documents)
+        }
+
+        return dirs
     }
 
     /// 扫描所有目录，返回发现的音频文件 URL 列表
@@ -51,10 +72,9 @@ final class FileScanner: ObservableObject {
         return allFiles
     }
 
-    /// 递归扫描单个目录
+    /// 递归扫描单个目录（支持任意层级子文件夹）
     private func scanDirectory(_ directory: URL) async throws -> [URL] {
         var audioFiles: [URL] = []
-
         let fileManager = FileManager.default
 
         guard let isDirectory = try? directory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory,
@@ -69,7 +89,6 @@ final class FileScanner: ObservableObject {
         )
 
         while let fileURL = enumerator?.nextObject() as? URL {
-            // 检查是否取消
             if Task.isCancelled { break }
 
             let resourceValues = try? fileURL.resourceValues(forKeys: [.isDirectoryKey])
