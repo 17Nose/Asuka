@@ -10,10 +10,6 @@ jobs:
     name: Build IPA
     runs-on: macos-latest
 
-    env:
-      CONFIG: Release
-      APP_PATH: DerivedData/Build/Products/Release-iphoneos/MusicApp.app
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -24,7 +20,8 @@ jobs:
       - name: Generate Xcode project
         run: |
           xcodegen generate
-          echo "✅ Xcode project generated"
+          echo "✅ 项目已生成"
+          grep -o '[A-Za-z]*\.swift' MusicApp.xcodeproj/project.pbxproj | sort -u | wc -l
 
       - name: Resolve package dependencies
         run: |
@@ -32,70 +29,73 @@ jobs:
             -project MusicApp.xcodeproj \
             -scheme MusicApp
 
-      - name: Build app
+      - name: Archive app
         run: |
-          xcodebuild build \
+          set -o pipefail
+          xcodebuild archive \
             -project MusicApp.xcodeproj \
             -scheme MusicApp \
-            -configuration "$CONFIG" \
+            -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -derivedDataPath ./DerivedData \
+            -archivePath ./build/MusicApp.xcarchive \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             DEVELOPMENT_TEAM="" \
             ENABLE_DEBUG_DYLIB=NO \
             ENABLE_PREVIEWS=NO \
-            ONLY_ACTIVE_ARCH=NO 2>&1 | tee build.log
+            ONLY_ACTIVE_ARCH=NO 2>&1 | tee archive.log
 
-      - name: Diagnose app bundle
+      - name: Show archive errors
+        if: failure()
         run: |
-          echo "========================================"
-          echo "  App Bundle 内容"
-          echo "========================================"
-          ls -la "$APP_PATH" || echo "❌ 目录不存在"
-
+          echo "=== 编译错误 ==="
+          grep -E "error:" archive.log | head -30 || echo "(无 error: 行)"
           echo ""
-          echo "========================================"
-          echo "  Info.plist 关键字段"
-          echo "========================================"
+          echo "=== archive.log 最后 80 行 ==="
+          tail -80 archive.log
+
+      - name: Locate and verify app
+        run: |
+          echo "=== 查找 .app 目录 ==="
+          find ./build -name "*.app" -type d 2>/dev/null || echo "(未找到 .app)"
+
+          APP_PATH="./build/MusicApp.xcarchive/Products/Applications/MusicApp.app"
+          echo ""
+          echo "=== App 内容 ==="
+          ls -la "$APP_PATH" || { echo "❌ 路径不存在"; exit 1; }
+
           EXEC_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$APP_PATH/Info.plist" 2>/dev/null || echo "")
-          echo "CFBundleExecutable = ${EXEC_NAME:-<缺失>}"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/Info.plist" 2>/dev/null || echo "❌ CFBundleIdentifier 缺失"
-
           echo ""
-          echo "========================================"
-          echo "  可执行文件校验"
-          echo "========================================"
+          echo "CFBundleExecutable = ${EXEC_NAME:-<缺失>}"
+
           if [ -n "$EXEC_NAME" ] && [ -f "$APP_PATH/$EXEC_NAME" ]; then
-            echo "✅ 可执行文件存在: $EXEC_NAME"
+            echo "✅ 可执行文件存在"
             file "$APP_PATH/$EXEC_NAME"
-            ls -lh "$APP_PATH/$EXEC_NAME"
+            lipo -archs "$APP_PATH/$EXEC_NAME" 2>/dev/null || true
           else
             echo "❌ 可执行文件缺失"
-            echo "--- 目录实际内容 ---"
-            ls -la "$APP_PATH"
+            echo "--- 在归档中全局搜索 ---"
+            find ./build -name "$EXEC_NAME" -type f 2>/dev/null || echo "(全库未找到)"
             exit 1
           fi
 
-      - name: Create clean IPA
+      - name: Create IPA
         run: |
+          APP_PATH="./build/MusicApp.xcarchive/Products/Applications/MusicApp.app"
           rm -rf Payload MusicApp.ipa
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
-
           xattr -cr Payload || true
           zip -r -X -y MusicApp.ipa Payload
           zip -d MusicApp.ipa "__MACOSX/*" 2>/dev/null || true
           rm -rf Payload
 
-          echo "========================================"
-          echo "  IPA 内容清单"
-          echo "========================================"
+          echo "=== IPA 内容 ==="
           unzip -l MusicApp.ipa
           echo ""
-          echo "  📦 大小: $(ls -lh MusicApp.ipa | awk '{print $5}')"
+          echo "📦 大小: $(ls -lh MusicApp.ipa | awk '{print $5}')"
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
@@ -105,8 +105,4 @@ jobs:
           retention-days: 30
 
       - name: Build Summary
-        run: |
-          echo "========================================="
-          echo "  🎵 MusicApp 编译完成!"
-          echo "  📱 IPA: MusicApp.ipa"
-          echo "========================================="
+        run: echo "🎵 编译完成: MusicApp.ipa"
