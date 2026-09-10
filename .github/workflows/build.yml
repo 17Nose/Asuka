@@ -10,6 +10,10 @@ jobs:
     name: Build IPA
     runs-on: macos-latest
 
+    env:
+      CONFIG: Release
+      APP_PATH: DerivedData/Build/Products/Release-iphoneos/MusicApp.app
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,7 +37,7 @@ jobs:
           xcodebuild build \
             -project MusicApp.xcodeproj \
             -scheme MusicApp \
-            -configuration Debug \
+            -configuration "$CONFIG" \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -derivedDataPath ./DerivedData \
@@ -41,60 +45,55 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             DEVELOPMENT_TEAM="" \
+            ENABLE_DEBUG_DYLIB=NO \
+            ENABLE_PREVIEWS=NO \
             ONLY_ACTIVE_ARCH=NO 2>&1 | tee build.log
 
       - name: Diagnose app bundle
         run: |
-          APP_PATH="./DerivedData/Build/Products/Debug-iphoneos/MusicApp.app"
-
           echo "========================================"
-          echo "  1. App Bundle 完整内容"
+          echo "  App Bundle 内容"
           echo "========================================"
-          ls -la "$APP_PATH"
+          ls -la "$APP_PATH" || echo "❌ 目录不存在"
 
           echo ""
           echo "========================================"
-          echo "  2. Info.plist 关键字段"
+          echo "  Info.plist 关键字段"
           echo "========================================"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$APP_PATH/Info.plist" || echo "❌ CFBundleExecutable 缺失"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/Info.plist" || echo "❌ CFBundleIdentifier 缺失"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleName" "$APP_PATH/Info.plist" || echo "❌ CFBundleName 缺失"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleDisplayName" "$APP_PATH/Info.plist" || echo "(无 CFBundleDisplayName)"
+          EXEC_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$APP_PATH/Info.plist" 2>/dev/null || echo "")
+          echo "CFBundleExecutable = ${EXEC_NAME:-<缺失>}"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/Info.plist" 2>/dev/null || echo "❌ CFBundleIdentifier 缺失"
 
           echo ""
           echo "========================================"
-          echo "  3. 可执行文件校验"
+          echo "  可执行文件校验"
           echo "========================================"
-          EXEC_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$APP_PATH/Info.plist")
-          if [ -f "$APP_PATH/$EXEC_NAME" ]; then
+          if [ -n "$EXEC_NAME" ] && [ -f "$APP_PATH/$EXEC_NAME" ]; then
             echo "✅ 可执行文件存在: $EXEC_NAME"
             file "$APP_PATH/$EXEC_NAME"
+            ls -lh "$APP_PATH/$EXEC_NAME"
           else
-            echo "❌ 可执行文件不存在: $EXEC_NAME"
+            echo "❌ 可执行文件缺失"
+            echo "--- 目录实际内容 ---"
+            ls -la "$APP_PATH"
             exit 1
           fi
 
       - name: Create clean IPA
         run: |
-          APP_PATH="./DerivedData/Build/Products/Debug-iphoneos/MusicApp.app"
-
           rm -rf Payload MusicApp.ipa
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
 
           xattr -cr Payload || true
-
           zip -r -X -y MusicApp.ipa Payload
-
           zip -d MusicApp.ipa "__MACOSX/*" 2>/dev/null || true
-
           rm -rf Payload
 
           echo "========================================"
           echo "  IPA 内容清单"
           echo "========================================"
           unzip -l MusicApp.ipa
-
           echo ""
           echo "  📦 大小: $(ls -lh MusicApp.ipa | awk '{print $5}')"
 
