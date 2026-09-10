@@ -93,7 +93,7 @@ final class ThemeManager: ObservableObject {
     private static func loadAccentColor() -> Color {
         let index = UserDefaults.standard.integer(forKey: "accent_color_index")
         guard index < accentColors.count else { return accentColors[0].color }
-        return accentColors[index]
+        return accentColors[index].color
     }
 }
 

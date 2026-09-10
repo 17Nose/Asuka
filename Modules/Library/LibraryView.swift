@@ -276,12 +276,33 @@ struct LibraryView: View {
 
     // MARK: - 专辑网格（视差效果）
 
-    private var albumGridView: some View {
+    /// 专辑聚合条目（拆成独立类型，避免 SwiftUI 类型检查超时）
+    struct AlbumItem: Identifiable {
+        let name: String
+        let artist: String
+        let coverPath: String?
+        let songs: [Song]
+        var id: String { name }
+        var songCount: Int { songs.count }
+    }
+
+    private var albumItems: [AlbumItem] {
         let grouped = Dictionary(grouping: viewModel.allSongs) {
             $0.album.isEmpty ? "未知专辑" : $0.album
         }
+        return grouped.keys.sorted().map { key in
+            let songs = grouped[key] ?? []
+            return AlbumItem(
+                name: key,
+                artist: songs.first?.artist ?? "",
+                coverPath: songs.first?.coverArtPath,
+                songs: songs
+            )
+        }
+    }
 
-        return Group {
+    private var albumGridView: some View {
+        Group {
             if viewModel.allSongs.isEmpty {
                 emptyStateView
             } else {
@@ -290,25 +311,8 @@ struct LibraryView: View {
                         columns: [GridItem(.adaptive(minimum: 155, maximum: 175), spacing: 14)],
                         spacing: 18
                     ) {
-                        ForEach(Array(grouped.keys.sorted().enumerated()), id: \.element) { index, album in
-                            let songs = grouped[album] ?? []
-                            AlbumCardView(
-                                albumName: album,
-                                artist: songs.first?.artist ?? "",
-                                coverPath: songs.first?.coverArtPath,
-                                songCount: songs.count
-                            )
-                            .onTapGesture {
-                                HapticStyle.medium.trigger()
-                                viewModel.play(song: songs[0], from: songs)
-                            }
-                            // 交错淡入
-                            .opacity(1)
-                            .animation(
-                                .spring(response: 0.4, dampingFraction: 0.7)
-                                    .delay(Double(index) * 0.04),
-                                value: true
-                            )
+                        ForEach(albumItems) { item in
+                            albumCard(item)
                         }
                     }
                     .padding(.horizontal, 16)
@@ -316,6 +320,20 @@ struct LibraryView: View {
                     .padding(.bottom, 80)
                 }
             }
+        }
+    }
+
+    private func albumCard(_ item: AlbumItem) -> some View {
+        AlbumCardView(
+            albumName: item.name,
+            artist: item.artist,
+            coverPath: item.coverPath,
+            songCount: item.songCount
+        )
+        .onTapGesture {
+            HapticStyle.medium.trigger()
+            guard let first = item.songs.first else { return }
+            viewModel.play(song: first, from: item.songs)
         }
     }
 
@@ -540,6 +558,56 @@ struct ArtistRowView: View {
             Color(hex: "00CEC9"),
         ]
         return colors[index % colors.count]
+    }
+}
+
+// MARK: - 专辑卡片
+
+struct AlbumCardView: View {
+    let albumName: String
+    let artist: String
+    let coverPath: String?
+    let songCount: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            coverImage
+                .frame(height: 150)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(albumName)
+                    .font(.system(size: 14, weight: .semibold))
+                    .lineLimit(1)
+
+                Text(artist.isEmpty ? "未知歌手" : artist)
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+
+                Text("\(songCount) 首")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary.opacity(0.7))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var coverImage: some View {
+        if let path = coverPath,
+           let image = UIImage(contentsOfFile: path) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+        } else {
+            RoundedRectangle(cornerRadius: 10)
+                .fill(ColorPalette.gradientPrimary.opacity(0.3))
+                .overlay(
+                    Image(systemName: "music.note.list")
+                        .foregroundColor(.white.opacity(0.6))
+                        .font(.system(size: 24))
+                )
+        }
     }
 }
 

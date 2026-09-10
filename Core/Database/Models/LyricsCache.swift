@@ -23,13 +23,5 @@ struct LyricsCache: Identifiable, Codable {
     }
 }
 
-/// LRC 歌词行
-struct LyricLine: Identifiable, Equatable {
-    let id = UUID()
-    let time: TimeInterval
-    let text: String
-
-    static func == (lhs: LyricLine, rhs: LyricLine) -> Bool {
-        lhs.time == rhs.time && lhs.text == rhs.text
-    }
-}
+// 注意：LyricLine / WordTiming / DisplayLyricLine 定义在 Utilities/LRC/Parser.swift
+// 此处不再重复声明，否则会导致 "ambiguous for type lookup" 编译错误

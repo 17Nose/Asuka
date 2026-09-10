@@ -3,19 +3,22 @@ import Foundation
 // MARK: - AI 推荐数据模型
 
 /// 推荐歌曲条目
+///
+/// 注意：`matchedLocalSong` 持有 `Song`（非 Codable），
+/// 因此必须排除在 CodingKeys 之外并给出默认值，否则无法合成 Codable 实现。
 struct RecommendedTrack: Identifiable, Codable {
-    let id = UUID()
-    let songId: String?            // 如果本地库中有匹配
-    let title: String
-    let artist: String
-    let album: String?
-    let genre: String?
-    let reason: String             // AI 推荐理由
-    let score: Double              // 匹配分数 (0-1)
-    var matchedLocalSong: Song?    // 匹配到的本地歌曲
+    var id = UUID()
+    var songId: String? = nil          // 匹配到的本地歌曲 ID
+    var title: String = ""
+    var artist: String = ""
+    var album: String? = nil
+    var genre: String? = nil
+    var reason: String = ""            // AI 推荐理由
+    var score: Double = 0              // 匹配分数 (0-1)
+    var matchedLocalSong: Song? = nil  // 匹配到的本地歌曲（不参与编解码）
 
     enum CodingKeys: String, CodingKey {
-        case title, artist, album, genre, reason, score
+        case songId, title, artist, album, genre, reason, score
     }
 }
 

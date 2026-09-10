@@ -93,7 +93,7 @@ struct LiveSpectrumView: View {
 enum WaveformGenerator {
     static func generate(count: Int = 100) -> [CGFloat] {
         var samples: [CGFloat] = []
-        var phase: CGFloat = 0
+        let phase: CGFloat = 0
 
         for i in 0..<count {
             // 多频叠加模拟真实波形

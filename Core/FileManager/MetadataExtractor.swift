@@ -42,31 +42,26 @@ final class MetadataExtractor {
                 break
             }
 
-            // 扩展键值读取
-            let stringValue = try? await item.load(.stringValue)
-            switch item.commonKey {
-            case .commonKeyAlbumArtist:
-                albumArtist = stringValue ?? albumArtist
-            case .commonKeyCreationDate:
-                if let dateStr = stringValue, let y = Int(dateStr.prefix(4)) {
-                    year = y
-                }
-            default:
-                break
-            }
         }
 
-        // 从 AVMetadataItem 读取年份
+        // 从原始 metadata 读取 ID3 专有字段（Album Artist / 年份）
+        // 注意：AVMetadataKey 没有 commonKeyAlbumArtist，必须按 identifier 判断
         let allMetadata = try await asset.load(.metadata)
         for item in allMetadata {
-            if let key = item.identifier?.rawValue {
-                if key == "id3/TPE2" || key == "id3/TPE2" {
-                    // Album Artist
+            guard let identifier = item.identifier?.rawValue else { continue }
+
+            // ID3: TPE2 = Album Artist；MP4: ©aAR
+            if identifier == "id3/TPE2" || identifier.contains("aAR") {
+                if let value = try? await item.load(.stringValue), !value.isEmpty {
+                    albumArtist = value
                 }
-                if key == "id3/TYER" || key == "id3/TDRC" {
-                    if let y = try? await item.load(.stringValue) {
-                        year = Int(y.prefix(4)) ?? year
-                    }
+            }
+
+            // ID3: TYER / TDRC（录音年份）
+            if identifier == "id3/TYER" || identifier == "id3/TDRC" {
+                if let value = try? await item.load(.stringValue),
+                   let parsedYear = Int(value.prefix(4)) {
+                    year = parsedYear
                 }
             }
         }

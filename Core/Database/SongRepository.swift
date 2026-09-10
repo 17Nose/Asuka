@@ -37,7 +37,7 @@ final class SongRepository {
                     cover_art_path = excluded.cover_art_path,
                     date_modified = excluded.date_modified
                 """,
-                arguments: song.dictionary
+                arguments: StatementArguments(song.dictionary)
             )
         }
     }
@@ -69,7 +69,7 @@ final class SongRepository {
                         cover_art_path = excluded.cover_art_path,
                         date_modified = excluded.date_modified
                     """,
-                    arguments: song.dictionary
+                    arguments: StatementArguments(song.dictionary)
                 )
             }
         }

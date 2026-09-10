@@ -95,39 +95,10 @@ extension View {
 }
 
 // MARK: - 自定义转场动画结构
-
-/// Hero 转场动画（用于从小播放条到全屏播放器）
-struct HeroTransition: Transition {
-    func body(content: Content, phase: TransitionPhase) -> some View {
-        content
-            .scaleEffect(phase == .identity ? 1 : 0.7)
-            .opacity(phase == .identity ? 1 : 0)
-            .blur(radius: phase == .identity ? 0 : 3)
-    }
-}
-
-/// 液体弹性弹出转场
-struct FluidTransition: Transition {
-    let fromRect: CGRect
-
-    func body(content: Content, phase: TransitionPhase) -> some View {
-        let scaleX = phase == .identity ? 1 : fromRect.width / UIScreen.main.bounds.width
-        let scaleY = phase == .identity ? 1 : fromRect.height / UIScreen.main.bounds.height
-
-        return content
-            .scaleEffect(
-                x: phase == .identity ? 1 : max(0.6, scaleX),
-                y: phase == .identity ? 1 : max(0.6, scaleY),
-                anchor: .bottom
-            )
-            .opacity(phase == .identity ? 1 : 0)
-            .clipShape(
-                RoundedRectangle(
-                    cornerRadius: phase == .identity ? 0 : 16
-                )
-            )
-    }
-}
+//
+// 说明：基于 `Transition.body(content:phase:)` 的自定义 Transition 需要 iOS 17+。
+// 本项目最低支持 iOS 16，因此自定义转场统一用上面的
+// `.slideInFromBottom()` / `.scaleFade()` / `.springBottomTransition()` 实现。
 
 // MARK: - 导航动画命名空间
 

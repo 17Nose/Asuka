@@ -80,8 +80,8 @@ struct SongRowView: View {
                     } else {
                         Rectangle()
                             .fill(isCurrentSong
-                                  ? ColorPalette.gradientPlaying
-                                  : ColorPalette.gradientPrimary.opacity(0.3))
+                                  ? AnyShapeStyle(ColorPalette.gradientPlaying)
+                                  : AnyShapeStyle(ColorPalette.gradientPrimary.opacity(0.3)))
                             .overlay(
                                 Image(systemName: "music.note")
                                     .foregroundColor(.white.opacity(0.7))

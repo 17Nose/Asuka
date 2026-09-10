@@ -21,6 +21,7 @@ jobs:
         run: |
           xcodegen generate
           echo "✅ 项目已生成"
+          echo "--- 项目中的 Swift 文件引用数 ---"
           grep -o '[A-Za-z]*\.swift' MusicApp.xcodeproj/project.pbxproj | sort -u | wc -l
 
       - name: Resolve package dependencies
@@ -76,7 +77,7 @@ jobs:
             lipo -archs "$APP_PATH/$EXEC_NAME" 2>/dev/null || true
           else
             echo "❌ 可执行文件缺失"
-            echo "--- 在归档中全局搜索 ---"
+            echo "--- 在归档中全局搜索 MusicApp 可执行文件 ---"
             find ./build -name "$EXEC_NAME" -type f 2>/dev/null || echo "(全库未找到)"
             exit 1
           fi

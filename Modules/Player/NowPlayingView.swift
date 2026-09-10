@@ -38,7 +38,7 @@ struct NowPlayingView: View {
                         // 自定义进度条（带波形）
                         MusicProgressSlider(
                             progress: Binding(
-                                get: { viewModel.progress },
+                                get: { CGFloat(viewModel.progress) },
                                 set: { _ in }
                             ),
                             duration: viewModel.duration,
@@ -430,12 +430,12 @@ struct NowPlayingView: View {
                             y: 4
                         )
 
-                    // 图标切换动画
+                    // 图标切换动画（contentTransition(.symbolEffect) 需 iOS 17+，此处用透明度过渡）
                     Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                         .font(.system(size: 30, weight: .medium))
                         .foregroundColor(ColorPalette.primary)
                         .offset(x: isPlaying ? 0 : 2)
-                        .contentTransition(.symbolEffect(.replace))
+                        .transition(.opacity)
                 }
             }
             .buttonStyle(.plain)

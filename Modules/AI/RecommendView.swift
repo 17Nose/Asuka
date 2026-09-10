@@ -511,69 +511,16 @@ struct TrackRow: View {
     let rank: Int
     var showScore: Bool = false
 
+    /// 是否匹配到本地曲库
+    private var isLocal: Bool { track.matchedLocalSong != nil }
+
     var body: some View {
         HStack(spacing: 12) {
-            // 排名
-            Text("\(rank)")
-                .font(.system(size: 16, weight: .bold, design: .monospaced))
-                .foregroundColor(rank <= 3 ? ColorPalette.primary : .secondary)
-                .frame(width: 24)
-
-            // 封面占位
-            RoundedRectangle(cornerRadius: 6)
-                .fill(
-                    track.matchedLocalSong != nil
-                        ? ColorPalette.gradientPrimary.opacity(0.2)
-                        : Color.secondary.opacity(0.1)
-                )
-                .frame(width: 40, height: 40)
-                .overlay(
-                    Image(systemName: track.matchedLocalSong != nil
-                          ? "music.note"
-                          : "globe")
-                        .font(.system(size: 14))
-                        .foregroundColor(
-                            track.matchedLocalSong != nil
-                                ? ColorPalette.primary
-                                : .secondary.opacity(0.5)
-                        )
-                )
-
-            // 歌曲信息
-            VStack(alignment: .leading, spacing: 3) {
-                Text(track.title)
-                    .font(.system(size: 15, weight: .medium))
-                    .lineLimit(1)
-
-                HStack(spacing: 6) {
-                    Text(track.artist)
-                        .font(.system(size: 13))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-
-                    if let album = track.album, !album.isEmpty {
-                        Text("· \(album)")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary.opacity(0.7))
-                            .lineLimit(1)
-                    }
-                }
-            }
-
+            rankLabel
+            coverPlaceholder
+            infoSection
             Spacer()
-
-            // 匹配分数或标签
-            if showScore {
-                Text(String(format: "%.0f%%", track.score * 100))
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
-                    .foregroundColor(matchColor)
-            }
-
-            if track.matchedLocalSong != nil {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 14))
-                    .foregroundColor(Color(hex: "00B894"))
-            }
+            trailingSection
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -583,6 +530,67 @@ struct TrackRow: View {
         if track.score >= 0.8 { return Color(hex: "00B894") }
         if track.score >= 0.5 { return Color(hex: "FDCB6E") }
         return .secondary
+    }
+
+    // MARK: - 子视图
+
+    private var rankLabel: some View {
+        Text(String(rank))
+            .font(.system(size: 16, weight: .bold, design: .monospaced))
+            .foregroundColor(rank <= 3 ? ColorPalette.primary : Color.secondary)
+            .frame(width: 24)
+    }
+
+    private var coverPlaceholder: some View {
+        RoundedRectangle(cornerRadius: 6)
+            .fill(isLocal
+                  ? ColorPalette.gradientPrimary.opacity(0.2)
+                  : Color.secondary.opacity(0.1))
+            .frame(width: 40, height: 40)
+            .overlay(
+                Image(systemName: isLocal ? "music.note" : "globe")
+                    .font(.system(size: 14))
+                    .foregroundColor(isLocal
+                                     ? ColorPalette.primary
+                                     : Color.secondary.opacity(0.5))
+            )
+    }
+
+    private var infoSection: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(track.title)
+                .font(.system(size: 15, weight: .medium))
+                .lineLimit(1)
+
+            HStack(spacing: 6) {
+                Text(track.artist)
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+
+                if let album = track.album, !album.isEmpty {
+                    Text("· \(album)")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary.opacity(0.7))
+                        .lineLimit(1)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var trailingSection: some View {
+        if showScore {
+            Text(String(format: "%.0f%%", track.score * 100))
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .foregroundColor(matchColor)
+        }
+
+        if isLocal {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 14))
+                .foregroundColor(Color(hex: "00B894"))
+        }
     }
 }
 
