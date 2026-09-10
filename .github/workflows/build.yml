@@ -53,9 +53,23 @@ jobs:
         run: |
           echo "=== 编译错误 ==="
           grep -E "error:" archive.log | head -30 || echo "(无 error: 行)"
-          echo ""
-          echo "=== archive.log 最后 80 行 ==="
-          tail -80 archive.log
+
+      - name: Publish build errors to repo
+        if: failure()
+        run: |
+          {
+            echo "=== ERRORS ==="
+            grep -E "error:" archive.log | head -80 || true
+            echo ""
+            echo "=== TAIL 120 ==="
+            tail -120 archive.log
+          } > BUILD_ERRORS.txt
+
+          git config user.email "ci@github.com"
+          git config user.name "CI"
+          git add -f BUILD_ERRORS.txt
+          git commit -m "ci: build errors [skip ci]" || true
+          git push || true
 
       - name: Locate and verify app
         run: |
