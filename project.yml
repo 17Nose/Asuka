@@ -9,16 +9,15 @@ targets:
     type: application
     platform: iOS
     sources:
-      - App
-      - Core
-      - Modules
-      - UI
-      - Utilities
+      - path: App
+      - path: Core
+      - path: Modules
+      - path: UI
+      - path: Utilities
     settings:
       base:
         SWIFT_VERSION: "5.9"
         PRODUCT_BUNDLE_IDENTIFIER: com.musicapp.player
-        PRODUCT_NAME: MusicApp
 
         GENERATE_INFOPLIST_FILE: "YES"
         INFOPLIST_KEY_CFBundleDisplayName: "MusicApp"
