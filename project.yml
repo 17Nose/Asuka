@@ -28,6 +28,9 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait"
         INFOPLIST_KEY_NSAppleMusicUsageDescription: "需要访问您的音乐库以播放本地音乐文件"
 
+        ENABLE_DEBUG_DYLIB: "NO"
+        ENABLE_PREVIEWS: "NO"
+
         CODE_SIGN_STYLE: Manual
         CODE_SIGNING_REQUIRED: "NO"
         CODE_SIGNING_ALLOWED: "NO"
