@@ -20,6 +20,7 @@ final class MetadataExtractor {
         var albumArtist = ""
         var genre = ""
         var year = 0
+        var trackNumber = 0
         var coverArtData: Data?
         var bitrate = 0
         var sampleRate = 44100
@@ -64,6 +65,23 @@ final class MetadataExtractor {
                     year = parsedYear
                 }
             }
+
+            // 音轨号 —— 两种格式的存储方式完全不同
+            if identifier == "id3/TRCK" {
+                // ID3：字符串，形如 "3/12"，取斜杠前一段
+                if let value = try? await item.load(.stringValue),
+                   let first = value.split(separator: "/").first,
+                   let number = Int(first.trimmingCharacters(in: .whitespaces)) {
+                    trackNumber = number
+                }
+            } else if identifier.contains("trkn") {
+                // MP4 / M4A：二进制，不是字符串，不能用 load(.stringValue)
+                // trkn 载荷布局： [0-1] 保留 | [2-3] 音轨号(BE UInt16) | [4-5] 总数 | [6-7] 保留
+                if let data = try? await item.load(.dataValue), data.count >= 4 {
+                    let base = data.startIndex
+                    trackNumber = Int((UInt16(data[base + 2]) << 8) | UInt16(data[base + 3]))
+                }
+            }
         }
 
         // 从音频轨道获取比特率和采样率
@@ -82,6 +100,10 @@ final class MetadataExtractor {
         }
         if artist.isEmpty {
             artist = Song.artistFromFileName(url.lastPathComponent)
+        }
+        // 没有内嵌音轨号时，尝试从文件名前缀（如 "01 - 歌名.m4a"）推断
+        if trackNumber == 0 {
+            trackNumber = Song.trackNumberFromFileName(url.lastPathComponent)
         }
 
         // 保存封面图片到缓存
@@ -103,6 +125,7 @@ final class MetadataExtractor {
             albumArtist: albumArtist,
             genre: genre,
             year: year,
+            trackNumber: trackNumber,
             duration: duration.isFinite ? duration : 0,
             fileSize: fileSize,
             format: format,

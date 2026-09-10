@@ -29,121 +29,142 @@ struct LibraryView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack(alignment: .bottom) {
-                // 背景色跟随主题
-                theme.backgroundColor
-                    .ignoresSafeArea()
+        ZStack(alignment: .bottom) {
+            // 背景色跟随主题
+            theme.backgroundColor
+                .ignoresSafeArea()
 
-                VStack(spacing: 0) {
-                    // 搜索栏（动画）
-                    searchBar
-                        .padding(.horizontal, 16)
-                        .padding(.top, 12)
-
-                    // Tab 选择器（视差效果）
-                    tabPicker
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .offset(y: headerOffset * -0.3)
-                        .opacity(1 - max(0, headerOffset / 100))
-
-                    // 内容区
-                    if isSearching && !viewModel.searchQuery.isEmpty {
-                        SongListView(songs: viewModel.searchResults)
-                            .transition(.opacity.combined(with: .move(edge: .trailing)))
-                    } else {
-                        tabContent
-                    }
-
-                    Spacer(minLength: 66) // 为 mini player 留空间
-                }
-
-                // 扫描进度提示
-                if viewModel.isScanning {
-                    scanningBanner
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                        .zIndex(10)
-                }
-
-                // 迷你播放条
-                MiniPlayerView()
-                    .environmentObject(viewModel)
-                    .zIndex(5)
-            }
-            .animation(.easeInOut(duration: 0.3), value: isSearching)
-            .animation(.easeInOut(duration: 0.3), value: viewModel.isScanning)
-            .navigationBarHidden(true)
-            // 主题色工具栏操作
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 14) {
-                        // 主题切换
-                        Menu {
-                            ForEach(ThemeMode.allCases, id: \.rawValue) { mode in
-                                Button(action: { theme.themeMode = mode }) {
-                                    Label(
-                                        mode.rawValue,
-                                        systemImage: theme.themeMode == mode
-                                            ? "checkmark"
-                                            : mode.icon
-                                    )
-                                }
-                            }
-
-                            Divider()
-
-                            // 主题色选择
-                            ForEach(ThemeManager.accentColors, id: \.name) { item in
-                                Button(action: { theme.accentColor = item.color }) {
-                                    Label(
-                                        item.name,
-                                        systemImage: theme.accentColor == item.color
-                                            ? "checkmark"
-                                            : "circle.fill"
-                                    )
-                                    .foregroundColor(item.color)
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "paintpalette")
-                                .font(.system(size: 16))
-                                .foregroundColor(theme.textPrimary)
+            NavigationStack {
+                rootContent
+                    // 用 .toolbar(.hidden) 而非 navigationBarHidden：
+                    // 后者在 iOS 16 下会把 push 出来的子页面导航栏和返回按钮一起压掉
+                    .toolbar(.hidden, for: .navigationBar)
+                    .navigationDestination(for: LibraryRoute.self) { route in
+                        switch route {
+                        case .artist(let name):
+                            ArtistDetailView(artistName: name)
+                        case .album(let name, let artist):
+                            AlbumDetailView(albumName: name, artistName: artist)
                         }
-
-                        // 导入本地文件
-                        Button(action: {
-                            HapticStyle.light.trigger()
-                            showImporter = true
-                        }) {
-                            Image(systemName: "plus.circle")
-                                .font(.system(size: 16))
-                                .foregroundColor(theme.textPrimary)
-                        }
-                        .buttonStyle(BouncyButtonStyle(scale: 0.85))
-                        .disabled(viewModel.isImporting)
-
-                        // 扫描按钮
-                        scanButton
                     }
-                }
+                    .fileImporter(
+                        isPresented: $showImporter,
+                        allowedContentTypes: [.audio, .mp3, .mpeg4Audio, .mpeg4Movie, .wav, .aiff, .item],
+                        allowsMultipleSelection: true
+                    ) { result in
+                        handleImport(result)
+                    }
+                    .alert("导入完成", isPresented: Binding(
+                        get: { importResultMessage != nil },
+                        set: { if !$0 { importResultMessage = nil } }
+                    )) {
+                        Button("好", role: .cancel) { importResultMessage = nil }
+                    } message: {
+                        Text(importResultMessage ?? "")
+                    }
             }
-            .fileImporter(
-                isPresented: $showImporter,
-                allowedContentTypes: [.audio, .mp3, .mpeg4Audio, .mpeg4Movie, .wav, .aiff, .item],
-                allowsMultipleSelection: true
-            ) { result in
-                handleImport(result)
+
+            // 扫描进度提示
+            if viewModel.isScanning {
+                scanningBanner
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(10)
             }
-            .alert("导入完成", isPresented: Binding(
-                get: { importResultMessage != nil },
-                set: { if !$0 { importResultMessage = nil } }
-            )) {
-                Button("好", role: .cancel) { importResultMessage = nil }
-            } message: {
-                Text(importResultMessage ?? "")
-            }
+
+            // 迷你播放条 —— 放在 NavigationStack 外层，
+            // 这样 push 到歌手/专辑详情页时它依然常驻（此前会被整个替换掉）
+            MiniPlayerView()
+                .environmentObject(viewModel)
+                .zIndex(5)
         }
+        .animation(.easeInOut(duration: 0.3), value: isSearching)
+        .animation(.easeInOut(duration: 0.3), value: viewModel.isScanning)
+    }
+
+    // MARK: - 导航栈根内容
+
+    private var rootContent: some View {
+        VStack(spacing: 0) {
+            headerBar
+
+            // Tab 选择器（视差效果）
+            tabPicker
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .offset(y: headerOffset * -0.3)
+                .opacity(1 - max(0, headerOffset / 100))
+
+            // 内容区
+            if isSearching && !viewModel.searchQuery.isEmpty {
+                SongListView(songs: viewModel.searchResults)
+                    .transition(.opacity.combined(with: .move(edge: .trailing)))
+            } else {
+                tabContent
+            }
+
+            Spacer(minLength: 66) // 为 mini player 留空间
+        }
+    }
+
+    // MARK: - 顶部栏（搜索 + 操作按钮）
+
+    /// 操作按钮直接放在这里，**不能**放导航栏的 toolbar 里：
+    /// 导航栏在本页是隐藏的，放进去等于放进看不见的地方（导入按钮曾因此无法点击）
+    private var headerBar: some View {
+        HStack(spacing: 10) {
+            searchBar
+            themeMenu
+            importButton
+            scanButton
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+    }
+
+    /// 主题切换
+    private var themeMenu: some View {
+        Menu {
+            ForEach(ThemeMode.allCases, id: \.rawValue) { mode in
+                Button(action: { theme.themeMode = mode }) {
+                    Label(
+                        mode.rawValue,
+                        systemImage: theme.themeMode == mode ? "checkmark" : mode.icon
+                    )
+                }
+            }
+
+            Divider()
+
+            ForEach(ThemeManager.accentColors, id: \.name) { item in
+                Button(action: { theme.accentColor = item.color }) {
+                    Label(
+                        item.name,
+                        systemImage: theme.accentColor == item.color ? "checkmark" : "circle.fill"
+                    )
+                    .foregroundColor(item.color)
+                }
+            }
+        } label: {
+            Image(systemName: "paintpalette")
+                .font(.system(size: 17))
+                .foregroundColor(theme.textPrimary)
+                .frame(width: 34, height: 34)
+        }
+    }
+
+    /// 导入本地文件
+    private var importButton: some View {
+        Button {
+            HapticStyle.light.trigger()
+            showImporter = true
+        } label: {
+            Image(systemName: "plus.circle")
+                .font(.system(size: 17))
+                .foregroundColor(theme.textPrimary)
+                .frame(width: 34, height: 34)
+        }
+        .buttonStyle(BouncyButtonStyle(scale: 0.85))
+        .disabled(viewModel.isImporting)
     }
 
     // MARK: - 处理导入
@@ -327,29 +348,8 @@ struct LibraryView: View {
 
     // MARK: - 专辑网格（视差效果）
 
-    /// 专辑聚合条目（拆成独立类型，避免 SwiftUI 类型检查超时）
-    struct AlbumItem: Identifiable {
-        let name: String
-        let artist: String
-        let coverPath: String?
-        let songs: [Song]
-        var id: String { name }
-        var songCount: Int { songs.count }
-    }
-
     private var albumItems: [AlbumItem] {
-        let grouped = Dictionary(grouping: viewModel.allSongs) {
-            $0.album.isEmpty ? "未知专辑" : $0.album
-        }
-        return grouped.keys.sorted().map { key in
-            let songs = grouped[key] ?? []
-            return AlbumItem(
-                name: key,
-                artist: songs.first?.artist ?? "",
-                coverPath: songs.first?.coverArtPath,
-                songs: songs
-            )
-        }
+        LibraryGrouping.albums(from: viewModel.allSongs)
     }
 
     private var albumGridView: some View {
@@ -374,46 +374,41 @@ struct LibraryView: View {
         }
     }
 
+    /// 点专辑进详情页（不再直接播放）
     private func albumCard(_ item: AlbumItem) -> some View {
-        AlbumCardView(
-            albumName: item.name,
-            artist: item.artist,
-            coverPath: item.coverPath,
-            songCount: item.songCount
-        )
-        .onTapGesture {
-            HapticStyle.medium.trigger()
-            guard let first = item.songs.first else { return }
-            viewModel.play(song: first, from: item.songs)
+        NavigationLink(value: LibraryRoute.album(name: item.name, artist: item.artist)) {
+            AlbumCardView(
+                albumName: item.name,
+                artist: item.yearDisplay ?? item.artist,
+                coverPath: item.coverPath,
+                songCount: item.songCount
+            )
         }
+        .buttonStyle(.plain)
     }
 
     // MARK: - 歌手列表
 
-    private var artistListView: some View {
-        let grouped = Dictionary(grouping: viewModel.allSongs) {
-            $0.artist.isEmpty ? "未知歌手" : $0.artist
-        }
+    private var artistItems: [ArtistItem] {
+        LibraryGrouping.artists(from: viewModel.allSongs)
+    }
 
-        return Group {
+    private var artistListView: some View {
+        Group {
             if viewModel.allSongs.isEmpty {
                 emptyStateView
             } else {
                 List {
-                    ForEach(Array(grouped.keys.sorted().enumerated()), id: \.element) { index, artist in
-                        let songs = grouped[artist] ?? []
-                        ArtistRowView(
-                            artist: artist,
-                            songCount: songs.count,
-                            index: index
-                        )
+                    ForEach(Array(artistItems.enumerated()), id: \.element.id) { index, item in
+                        NavigationLink(value: LibraryRoute.artist(item.name)) {
+                            ArtistRowView(
+                                artist: item.name,
+                                songCount: item.songCount,
+                                index: index
+                            )
+                        }
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            HapticStyle.medium.trigger()
-                            viewModel.play(song: songs[0], from: songs)
-                        }
                     }
                 }
                 .listStyle(.plain)
@@ -473,22 +468,18 @@ struct LibraryView: View {
             HapticStyle.medium.trigger()
             Task { await viewModel.scanFiles() }
         }) {
-            if viewModel.isScanning {
-                ProgressView()
-                    .scaleEffect(0.85)
-                    .tint(ColorPalette.primary)
-            } else {
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 16))
-                    .foregroundColor(theme.textPrimary)
-                    .rotationEffect(.degrees(showScanAnimation ? 360 : 0))
-                    .animation(
-                        viewModel.isScanning
-                            ? .linear(duration: 1).repeatForever(autoreverses: false)
-                            : .default,
-                        value: viewModel.isScanning
-                    )
+            Group {
+                if viewModel.isScanning {
+                    ProgressView()
+                        .scaleEffect(0.85)
+                        .tint(ColorPalette.primary)
+                } else {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 17))
+                        .foregroundColor(theme.textPrimary)
+                }
             }
+            .frame(width: 34, height: 34)
         }
         .disabled(viewModel.isScanning)
         .buttonStyle(BouncyButtonStyle(scale: 0.85))
@@ -588,10 +579,7 @@ struct ArtistRowView: View {
             }
 
             Spacer()
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.secondary.opacity(0.4))
+            // 不自己画 chevron —— 外层 NavigationLink 在 List 中会自带一个
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 4)

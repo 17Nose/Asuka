@@ -21,11 +21,32 @@ final class DatabaseManager: @unchecked Sendable {
             at: documentsPath, withIntermediateDirectories: true
         )
 
-        let dbPath = documentsPath.appendingPathComponent("music_app.sqlite").path
+        let dbPath = documentsPath.appendingPathComponent(Constants.databaseFileName).path
         print("📁 数据库路径: \(dbPath)")
 
         dbQueue = try DatabaseQueue(path: dbPath)
         try createTables()
+        try migrate()
+    }
+
+    // MARK: - 轻量迁移
+
+    /// 补充后来新增的列
+    /// 所有表都是 `ifNotExists` 建的，新增列对**已存在的库**不会生效，
+    /// 必须显式 ALTER TABLE。这里按需幂等执行，重复运行无副作用。
+    private func migrate() throws {
+        guard let dbQueue = dbQueue else { return }
+
+        try dbQueue.write { db in
+            let existingColumns = try Row
+                .fetchAll(db, sql: "PRAGMA table_info(song)")
+                .compactMap { $0["name"] as String? }
+
+            if !existingColumns.contains("track_number") {
+                try db.execute(sql: "ALTER TABLE song ADD COLUMN track_number INTEGER")
+                print("✅ 迁移：song 表新增 track_number 列")
+            }
+        }
     }
 
     func getQueue() throws -> DatabaseQueue {
@@ -51,6 +72,7 @@ final class DatabaseManager: @unchecked Sendable {
                 t.column("album_artist", .text)
                 t.column("genre", .text)
                 t.column("year", .integer)
+                t.column("track_number", .integer)
                 t.column("duration", .double)
                 t.column("file_size", .integer)
                 t.column("format", .text)

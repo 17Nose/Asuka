@@ -11,32 +11,37 @@ final class SongRepository {
 
     // MARK: - 歌曲 CRUD
 
+    /// 单份 INSERT ... ON CONFLICT SQL，供 upsert / upsertBatch 共用。
+    /// （此前两处各写一份，新增字段时极易漏改其中一处。）
+    private static let upsertSQL = """
+    INSERT INTO song (id, file_path, title, artist, album, album_artist,
+        genre, year, track_number, duration, file_size, format, bitrate, sample_rate,
+        cover_art_path, date_added, date_modified)
+    VALUES (:id, :file_path, :title, :artist, :album, :album_artist,
+        :genre, :year, :track_number, :duration, :file_size, :format, :bitrate, :sample_rate,
+        :cover_art_path, :date_added, :date_modified)
+    ON CONFLICT(id) DO UPDATE SET
+        title = excluded.title,
+        artist = excluded.artist,
+        album = excluded.album,
+        album_artist = excluded.album_artist,
+        genre = excluded.genre,
+        year = excluded.year,
+        track_number = excluded.track_number,
+        duration = excluded.duration,
+        file_size = excluded.file_size,
+        format = excluded.format,
+        bitrate = excluded.bitrate,
+        sample_rate = excluded.sample_rate,
+        cover_art_path = excluded.cover_art_path,
+        date_modified = excluded.date_modified
+    """
+
     /// 插入或更新一首歌曲
     func upsert(_ song: Song) throws {
         try dbQueue.write { db in
             try db.execute(
-                sql: """
-                INSERT INTO song (id, file_path, title, artist, album, album_artist,
-                    genre, year, duration, file_size, format, bitrate, sample_rate,
-                    cover_art_path, date_added, date_modified)
-                VALUES (:id, :file_path, :title, :artist, :album, :album_artist,
-                    :genre, :year, :duration, :file_size, :format, :bitrate, :sample_rate,
-                    :cover_art_path, :date_added, :date_modified)
-                ON CONFLICT(id) DO UPDATE SET
-                    title = excluded.title,
-                    artist = excluded.artist,
-                    album = excluded.album,
-                    album_artist = excluded.album_artist,
-                    genre = excluded.genre,
-                    year = excluded.year,
-                    duration = excluded.duration,
-                    file_size = excluded.file_size,
-                    format = excluded.format,
-                    bitrate = excluded.bitrate,
-                    sample_rate = excluded.sample_rate,
-                    cover_art_path = excluded.cover_art_path,
-                    date_modified = excluded.date_modified
-                """,
+                sql: Self.upsertSQL,
                 arguments: StatementArguments(song.dictionary)
             )
         }
@@ -47,28 +52,7 @@ final class SongRepository {
         try dbQueue.write { db in
             for song in songs {
                 try db.execute(
-                    sql: """
-                    INSERT INTO song (id, file_path, title, artist, album, album_artist,
-                        genre, year, duration, file_size, format, bitrate, sample_rate,
-                        cover_art_path, date_added, date_modified)
-                    VALUES (:id, :file_path, :title, :artist, :album, :album_artist,
-                        :genre, :year, :duration, :file_size, :format, :bitrate, :sample_rate,
-                        :cover_art_path, :date_added, :date_modified)
-                    ON CONFLICT(id) DO UPDATE SET
-                        title = excluded.title,
-                        artist = excluded.artist,
-                        album = excluded.album,
-                        album_artist = excluded.album_artist,
-                        genre = excluded.genre,
-                        year = excluded.year,
-                        duration = excluded.duration,
-                        file_size = excluded.file_size,
-                        format = excluded.format,
-                        bitrate = excluded.bitrate,
-                        sample_rate = excluded.sample_rate,
-                        cover_art_path = excluded.cover_art_path,
-                        date_modified = excluded.date_modified
-                    """,
+                    sql: Self.upsertSQL,
                     arguments: StatementArguments(song.dictionary)
                 )
             }
@@ -349,6 +333,7 @@ extension Song {
             "album_artist": albumArtist,
             "genre": genre,
             "year": year,
+            "track_number": trackNumber,
             "duration": duration,
             "file_size": fileSize,
             "format": format,
@@ -370,6 +355,7 @@ extension Song {
             albumArtist: row["album_artist"] ?? "",
             genre: row["genre"] ?? "",
             year: row["year"] ?? 0,
+            trackNumber: row["track_number"] ?? 0,
             duration: row["duration"] ?? 0,
             fileSize: row["file_size"] ?? 0,
             format: row["format"] ?? "mp3",

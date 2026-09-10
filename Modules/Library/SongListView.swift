@@ -61,6 +61,8 @@ struct SongListView: View {
 struct SongRowView: View {
     let song: Song
     let showAlbumArt: Bool
+    /// 专辑页传入音轨号，行首显示曲序；为 nil 时按原样显示封面缩略图
+    var trackNumber: Int? = nil
     @EnvironmentObject var viewModel: PlayerViewModel
 
     var isCurrentSong: Bool {
@@ -69,28 +71,14 @@ struct SongRowView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // 封面或序号
-            if showAlbumArt {
-                Group {
-                    if let path = song.coverArtPath,
-                       let image = UIImage(contentsOfFile: path) {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                    } else {
-                        Rectangle()
-                            .fill(isCurrentSong
-                                  ? AnyShapeStyle(ColorPalette.gradientPlaying)
-                                  : AnyShapeStyle(ColorPalette.gradientPrimary.opacity(0.3)))
-                            .overlay(
-                                Image(systemName: "music.note")
-                                    .foregroundColor(.white.opacity(0.7))
-                                    .font(.system(size: 14))
-                            )
-                    }
-                }
-                .frame(width: 48, height: 48)
-                .cornerRadius(6)
+            if let number = trackNumber {
+                // 专辑页：行首曲目号
+                Text(String(number))
+                    .font(.system(size: 15, weight: .medium, design: .monospaced))
+                    .foregroundColor(isCurrentSong ? ColorPalette.primary : .secondary)
+                    .frame(width: 28, alignment: .trailing)
+            } else if showAlbumArt {
+                albumArtThumbnail
             }
 
             // 歌曲信息
@@ -132,6 +120,30 @@ struct SongRowView: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    /// 封面缩略图（无封面时用渐变占位）
+    private var albumArtThumbnail: some View {
+        Group {
+            if let path = song.coverArtPath,
+               let image = UIImage(contentsOfFile: path) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Rectangle()
+                    .fill(isCurrentSong
+                          ? AnyShapeStyle(ColorPalette.gradientPlaying)
+                          : AnyShapeStyle(ColorPalette.gradientPrimary.opacity(0.3)))
+                    .overlay(
+                        Image(systemName: "music.note")
+                            .foregroundColor(.white.opacity(0.7))
+                            .font(.system(size: 14))
+                    )
+            }
+        }
+        .frame(width: 48, height: 48)
+        .cornerRadius(6)
     }
 }
 

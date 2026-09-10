@@ -9,54 +9,44 @@ struct RecommendView: View {
     @State private var animateCards = false
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // 时段问候头部
-                    headerSection
-                        .padding(.horizontal, 20)
-                        .padding(.top, 8)
+        // 不再自带 NavigationStack —— 它已经被 LibraryView 的导航栈包住，
+        // 再嵌一层会导致 navigationDestination 失效
+        ScrollView {
+            VStack(spacing: 20) {
+                // 时段问候头部（含设置入口）
+                headerSection
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
 
-                    // 推荐模式选择器
-                    modePicker
-                        .padding(.horizontal, 20)
+                // 推荐模式选择器
+                modePicker
+                    .padding(.horizontal, 20)
 
-                    // 推荐内容
-                    switch selectedMode {
-                    case .dailyMix:
-                        dailyMixSection
-                    case .moodRadio:
-                        moodRadioSection
-                    case .discoverSimilar:
-                        discoverSimilarSection
-                    }
+                // 推荐内容
+                switch selectedMode {
+                case .dailyMix:
+                    dailyMixSection
+                case .moodRadio:
+                    moodRadioSection
+                case .discoverSimilar:
+                    discoverSimilarSection
+                }
 
-                    // AI 设置卡片
-                    apiSettingsCard
-                        .padding(.horizontal, 20)
-                        .padding(.top, 8)
-                }
-                .padding(.bottom, 100)
+                // AI 设置卡片
+                apiSettingsCard
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
             }
-            .background(Color(hex: "F8F9FA").ignoresSafeArea())
-            .navigationTitle("AI 推荐")
-            .navigationBarHidden(true)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showAPISettings = true }) {
-                        Image(systemName: "gearshape")
-                            .foregroundColor(.secondary)
-                    }
-                }
-            }
-            .sheet(isPresented: $showAPISettings) {
-                APISettingsView()
-            }
-            .onAppear {
-                engine.checkDailyRefresh()
-                withAnimation(.spring(response: 0.6, dampingFraction: 0.7).delay(0.1)) {
-                    animateCards = true
-                }
+            .padding(.bottom, 100)
+        }
+        .background(Color(hex: "F8F9FA").ignoresSafeArea())
+        .sheet(isPresented: $showAPISettings) {
+            APISettingsView()
+        }
+        .onAppear {
+            engine.checkDailyRefresh()
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.7).delay(0.1)) {
+                animateCards = true
             }
         }
     }

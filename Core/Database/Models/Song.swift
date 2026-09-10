@@ -10,6 +10,8 @@ struct Song: Identifiable, Codable, Equatable {
     let albumArtist: String
     let genre: String
     let year: Int
+    /// 音轨号（专辑内曲序），0 表示未知
+    let trackNumber: Int
     let duration: TimeInterval
     let fileSize: Int64
     let format: String
@@ -55,6 +57,11 @@ struct Song: Identifiable, Codable, Equatable {
         return formatter.string(fromByteCount: fileSize)
     }
 
+    /// 有音轨号时返回其字符串，否则 nil（供专辑页行首展示）
+    var trackDisplay: String? {
+        trackNumber > 0 ? String(trackNumber) : nil
+    }
+
     // MARK: - 初始化
 
     init(
@@ -66,6 +73,7 @@ struct Song: Identifiable, Codable, Equatable {
         albumArtist: String = "",
         genre: String = "",
         year: Int = 0,
+        trackNumber: Int = 0,
         duration: TimeInterval = 0,
         fileSize: Int64 = 0,
         format: String = "mp3",
@@ -83,6 +91,7 @@ struct Song: Identifiable, Codable, Equatable {
         self.albumArtist = albumArtist
         self.genre = genre
         self.year = year
+        self.trackNumber = trackNumber
         self.duration = duration
         self.fileSize = fileSize
         self.format = format
@@ -113,5 +122,22 @@ extension Song {
             return String(name[..<dashRange.lowerBound]).trimmingCharacters(in: .whitespaces)
         }
         return ""
+    }
+
+    /// 当音频没有内嵌音轨号时，尝试从文件名前缀推断曲序
+    /// 支持 "01 - 歌名" / "01. 歌名" / "01 歌名" / "01_歌名"
+    static func trackNumberFromFileName(_ fileName: String) -> Int {
+        let name = (fileName as NSString).deletingPathExtension
+
+        // 只取前 4 个字符做前缀匹配
+        let prefix = String(name.prefix(4))
+        let digits = prefix.prefix { $0.isNumber }
+        guard !digits.isEmpty, digits.count <= 3 else { return 0 }
+
+        // 数字后面必须跟分隔符或空格，避免把 "1998年的夏天" 误判为曲序
+        let rest = prefix.dropFirst(digits.count)
+        if let next = rest.first, !" .-_".contains(next) { return 0 }
+
+        return Int(digits) ?? 0
     }
 }
