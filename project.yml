@@ -18,11 +18,21 @@ targets:
       base:
         SWIFT_VERSION: "5.9"
         PRODUCT_BUNDLE_IDENTIFIER: com.musicapp.player
-        CODE_SIGN_STYLE: Manual
-        CODE_SIGNING_REQUIRED: NO
-        INFOPLIST_KEY_UILaunchScreen: ""
-        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        PRODUCT_NAME: MusicApp
+
+        GENERATE_INFOPLIST_FILE: "YES"
+        INFOPLIST_KEY_CFBundleDisplayName: "MusicApp"
+        INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: "YES"
         INFOPLIST_KEY_UIBackgroundModes: "audio"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait"
+        INFOPLIST_KEY_NSAppleMusicUsageDescription: "需要访问您的音乐库以播放本地音乐文件"
+
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGNING_ALLOWED: "NO"
+        CODE_SIGN_IDENTITY: ""
+        DEVELOPMENT_TEAM: ""
     dependencies:
       - package: GRDB
         product: GRDB
