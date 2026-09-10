@@ -105,4 +105,5 @@ jobs:
           retention-days: 30
 
       - name: Build Summary
-        run: echo "🎵 编译完成: MusicApp.ipa"
+        run: |
+          echo "🎵 编译完成 MusicApp.ipa"
