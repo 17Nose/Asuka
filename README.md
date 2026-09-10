@@ -1,10 +1,12 @@
-# 🎵 MusicApp — iOS 本地音乐播放器
+# 🎵 Rin — iOS 本地音乐播放器
 
-一款精美的 iOS 本地离线音乐播放器，支持 LRC 歌词同步和 AI 智能推荐。
+一款精美的 iOS 本地离线音乐播放器，支持专辑级浏览、LRC 歌词同步和 AI 智能推荐。
 
 ## ✨ 功能特性
 
-- 🎧 **本地音乐播放**：扫描并播放设备上的 MP3/FLAC/WAV/M4A 等 10 种格式音频
+- 🎧 **本地音乐播放**：扫描并播放 MP3/M4A/MP4/FLAC/WAV 等 11 种格式音频
+- 🎤 **歌手 · 专辑浏览**：歌手 → 歌手详情 → 专辑 → 单曲 的完整层级（Apple Music 风格）
+- 🎵 **专辑曲序**：读取音频文件内的音轨号，按专辑原顺序 1、2、3… 排列
 - 🎨 **精美 UI**：黑胶唱片旋转动画、毛玻璃效果、实时频谱、弹性按钮动效
 - 📝 **歌词同步**：LRC/KRC 逐字解析、翻译歌词、三源在线搜索（网易云/QQ/酷狗）
 - 🔍 **全文搜索**：基于 SQLite FTS5 的歌曲/歌手/专辑全文搜索
@@ -17,7 +19,10 @@
 | 项目 | 版本 |
 |------|------|
 | iOS | 16.0+ |
-| Swift | 5.9+ |
+| Bundle ID | `com.rin.player` |
+
+> ⚠️ **从 MusicApp 升级的用户注意**：Bundle ID 已变更为 `com.rin.player`，
+> 系统会把它当成**全新 App**。请先卸载旧的 MusicApp 再安装 Rin。
 
 ---
 
@@ -25,81 +30,83 @@
 
 > ✅ **推荐给 Windows / Linux 用户** — 全程在浏览器完成
 
-### 第一步：Fork 并上传代码
+### 第一步：触发编译
 
-1. 点击本仓库右上角 **Fork** 
-2. 你的代码已经在仓库中了，无需额外操作
-
-### 第二步：触发编译
-
-1. 进入你 Fork 的仓库 → **Actions** 标签
+1. 进入仓库 → **Actions** 标签
 2. 点击左侧 **Build iOS App**
 3. 点击右侧 **Run workflow** 下拉按钮
-4. 选择 `debug`（首次建议）或 `release`
-5. 点击绿色 **Run workflow** 按钮
+4. 点击绿色 **Run workflow** 按钮
 
-等待约 **8-15 分钟**，编译完成后：
+等待约 **8-15 分钟**：
 
-6. 点击完成的工作流 → 页面底部 **Artifacts**
-7. 下载 **MusicApp-Unsigned** (一个 .zip 文件)
-8. 解压得到 `MusicApp.ipa`
+5. 点击完成的工作流 → 页面底部 **Artifacts**
+6. 下载 **Rin-Unsigned**（一个 .zip 文件）
+7. 解压得到 `Rin.ipa`
 
-### 第三步：签名并安装到 iPhone
-
-下载到 IPA 后，用以下任一工具签名安装：
+### 第二步：签名并安装到 iPhone
 
 | 工具 | 平台 | 说明 |
 |------|------|------|
-| **[SideStore](https://sidestore.io/)** | Windows/Mac | 开源，免费，WiFi 自动续签 |
-| **[AltStore](https://altstore.io/)** | Windows/Mac | 经典工具，需电脑配合续签 |
+| **[Sideloadly](https://sideloadly.io/)** | Windows/Mac | 简单直接，需数据线 |
+| **[SideStore](https://sidestore.io/)** | Windows/Mac | 开源，支持 WiFi 自动续签 |
 | **[爱思助手](https://www.i4.cn/)** | Windows | 中文界面，操作简单 |
 
-**以 SideStore 为例（推荐）：**
+**以 Sideloadly 为例：**
 
 ```
-1. 下载 SideStore 到你的电脑
-2. 用数据线连接 iPhone → 安装 SideStore 到手机
-3. iPhone 上打开 SideStore → Settings → 登录你的 Apple ID
-4. 把 MusicApp.ipa 通过 AirDrop/文件 传到 iPhone
-5. 在 iPhone 上用 SideStore 打开 IPA → 签名安装
-6. 去 设置 → 通用 → VPN与设备管理 → 信任证书
-7. 打开 MusicApp！
+1. 电脑打开 Sideloadly，用数据线连接 iPhone
+2. 把 Rin.ipa 拖进 Sideloadly
+3. 输入 Apple ID → Start
+4. iPhone 上：设置 → 通用 → VPN与设备管理 → 信任证书
+5. 打开 Rin！
 ```
 
-> ⚠️ 免费 Apple ID 每 7 天需续签。SideStore 支持 WiFi 自动续签。
+> ⚠️ 免费 Apple ID 每 7 天需续签。
 
 ---
 
 ## 💻 方式二：Mac + Xcode 本地编译
 
-### 1. 一键构建
-
 ```bash
-# 安装 XcodeGen
+# 一键构建
 brew install xcodegen
-
-# 生成项目
 xcodegen generate
+xcodebuild -resolvePackageDependencies -project Rin.xcodeproj -scheme Rin
+open Rin.xcodeproj
 
-# 解析依赖
-xcodebuild -resolvePackageDependencies -project MusicApp.xcodeproj -scheme MusicApp
-
-# 用 Xcode 打开
-open MusicApp.xcodeproj
+# 或使用构建脚本
+bash Scripts/build.sh debug
 ```
 
-### 2. 或使用构建脚本
+在 Xcode 中：Signing & Capabilities → Team 选你的 Apple ID → `Cmd + R`
 
-```bash
-bash Scripts/build.sh debug    # Debug 构建
-bash Scripts/build.sh release  # Release 构建
-```
+---
 
-### 3. 在 Xcode 中运行
+## 🎨 更换 App 图标
 
-1. 选择你的 iPhone 作为目标设备
-2. Signing & Capabilities → Team 选择你的 Apple ID
-3. `Cmd + R` 运行
+**只需要替换一个图片文件，不用改任何代码。**
+
+### 图片要求
+
+| 项目 | 要求 |
+|------|------|
+| 尺寸 | **1024 × 1024** 像素（正方形） |
+| 格式 | PNG |
+| 圆角 | ❌ 不要自己做圆角 —— iOS 会自动裁切 |
+| 透明背景 | ❌ 不要透明 —— 必须是实心背景 |
+| 主体 | 建议居中，四周留出约 10% 安全边距 |
+
+### 替换步骤
+
+1. 打开仓库目录 `Resources/Assets.xcassets/AppIcon.appiconset/`
+2. 删除现有的 `icon-1024.png`（点文件 → 右上角 🗑 Delete）
+3. 回到该目录 → **Add file → Upload files**
+4. 上传你的图片，**文件名必须改成 `icon-1024.png`**
+5. 提交后等 CI 构建完成 → 下载新 IPA → 重新签名安装
+
+> 💡 也可以直接把图片发给我，我来提交。
+>
+> 🔍 构建时 CI 会自动校验图标是否打包成功，缺失会直接报错，不会出现「以为换了其实没换」的情况。
 
 ---
 
@@ -109,14 +116,29 @@ App 支持**三种**导入方式，可按需选择。
 
 ### 方式一：内置打包（在电脑端预先放好）
 
-适合「一次性整理好一整批音乐，装完就能听」。
+适合「一次性整理好一整批音乐，装完就能听」。**推荐用于整张专辑收藏。**
 
 1. 在 GitHub 网页打开仓库的 `Resources/Music/` 目录
-2. 点 **Add file → Upload files**，把音频文件拖进去（支持建子文件夹分类）
+2. 点 **Add file → Upload files**，把音频文件拖进去
 3. 提交后等 CI 构建完成，下载新的 IPA 重新签名安装
 4. 打开 App → 点右上角 🔄 **扫描**，所有内置音乐就会出现
 
-> ⚠️ 仓库是公开的，请勿上传有版权的商业音乐（DMCA 风险）。
+**按专辑建子文件夹**（推荐，扫描器是递归的，任意层级都能识别）：
+
+```
+Resources/Music/
+├── Jay/
+│   ├── 可爱女人.m4a
+│   ├── 完美主义.m4a
+│   └── ...
+├── 范特西/
+│   ├── 爱在西元前.m4a
+│   └── ...
+└── 叶惠美/
+    └── ...
+```
+
+> ⚠️ 仓库是公开的，请勿上传有版权的商业音乐（DMCA 下架风险）。
 > 📦 建议总量控制在 200MB 以内，否则构建会变慢。
 > 🔄 每次新增文件都要重新构建 + 重新签名才能生效。
 
@@ -124,20 +146,18 @@ App 支持**三种**导入方式，可按需选择。
 
 1. 把音频文件传到 iPhone（AirDrop / 微信 / 网盘 / QQ 均可）
 2. 保存到「**文件**」App
-3. 打开 MusicApp → 点右上角 ➕ **导入** 按钮
+3. 打开 Rin → 点右上角 ➕ **导入** 按钮
 4. 选中文件即可，App 会自动复制并扫描入库
-
-> 支持一次选多个文件，也支持从 iCloud Drive 导入。
 
 ### 方式三：文件共享（连电脑批量拷）
 
-App 已开启文件共享，它的 Documents 目录会出现在：
+App 的 Documents 目录会出现在：
 
-- **iPhone 上**：「文件」App → 我的 iPhone → **MusicApp**
-- **Windows 上**：爱思助手 → 应用 → MusicApp → 文件管理 → Documents
-- **Mac 上**：Finder → iPhone → 文件 → MusicApp
+- **iPhone 上**：「文件」App → 我的 iPhone → **Rin**
+- **Windows 上**：爱思助手 → 应用 → Rin → 文件管理 → Documents
+- **Mac 上**：Finder → iPhone → 文件 → Rin
 
-直接把音频文件拖进去，然后在 App 里点 🔄 **扫描** 即可。
+拖进去后，在 App 里点 🔄 **扫描** 即可。
 
 ### 歌词文件
 
@@ -149,8 +169,8 @@ App 已开启文件共享，它的 Documents 目录会出现在：
 ## 📂 项目结构
 
 ```
-MusicApp/
-├── App/MusicApp.swift              ← @main 入口
+Rin/
+├── App/RinApp.swift                ← @main 入口
 ├── Core/
 │   ├── Audio/AudioPlayer.swift     ← AVFoundation 播放引擎
 │   ├── Database/                   ← SQLite + FTS5 + 数据仓库
@@ -158,8 +178,8 @@ MusicApp/
 │   └── Network/                    ← 歌词搜索 + AI 推荐 API
 ├── Modules/
 │   ├── Player/                     ← 播放器（全屏 + 迷你 + 歌词）
-│   ├── Library/                    ← 音乐库（歌曲/专辑/歌手）
-│   └── AI/                         ← 智能推荐（每日混音 + 心情电台）
+│   ├── Library/                    ← 音乐库（歌曲/专辑/歌手 + 详情页）
+│   └── AI/                         ← 智能推荐
 ├── UI/
 │   ├── Theme/                      ← 主题管理 + 色彩系统
 │   ├── Components/                 ← 唱片动画 + 波形 + 毛玻璃等
@@ -167,6 +187,9 @@ MusicApp/
 ├── Utilities/
 │   ├── LRC/Parser.swift            ← LRC/KRC 歌词解析器
 │   └── Constants.swift
+├── Resources/
+│   ├── Assets.xcassets/            ← App 图标等资源
+│   └── Music/                      ← 内置音乐（随 IPA 打包）
 ├── Scripts/build.sh                ← 本地构建脚本
 ├── project.yml                     ← XcodeGen 项目配置
 └── .github/workflows/build.yml     ← GitHub Actions 云编译

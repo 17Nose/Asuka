@@ -2,14 +2,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "MusicApp",
+    name: "Rin",
     platforms: [
         .iOS(.v16)
     ],
     products: [
         .library(
-            name: "MusicApp",
-            targets: ["MusicApp"]
+            name: "Rin",
+            targets: ["Rin"]
         ),
     ],
     dependencies: [
@@ -20,7 +20,7 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "MusicApp",
+            name: "Rin",
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
                 .product(name: "Kingfisher", package: "Kingfisher"),

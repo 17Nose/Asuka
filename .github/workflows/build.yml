@@ -13,6 +13,12 @@ jobs:
     name: Build IPA
     runs-on: macos-latest
 
+    env:
+      SCHEME: Rin
+      ARCHIVE_PATH: ./build/Rin.xcarchive
+      APP_PATH: ./build/Rin.xcarchive/Products/Applications/Rin.app
+      IPA_NAME: Rin.ipa
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -24,25 +30,24 @@ jobs:
         run: |
           xcodegen generate
           echo "✅ 项目已生成"
-          echo "--- 项目中的 Swift 文件引用数 ---"
-          grep -o '[A-Za-z]*\.swift' MusicApp.xcodeproj/project.pbxproj | sort -u | wc -l
+          ls -d Rin.xcodeproj
 
       - name: Resolve package dependencies
         run: |
           xcodebuild -resolvePackageDependencies \
-            -project MusicApp.xcodeproj \
-            -scheme MusicApp
+            -project Rin.xcodeproj \
+            -scheme "$SCHEME"
 
       - name: Archive app
         run: |
           set -o pipefail
           xcodebuild archive \
-            -project MusicApp.xcodeproj \
-            -scheme MusicApp \
+            -project Rin.xcodeproj \
+            -scheme "$SCHEME" \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -archivePath ./build/MusicApp.xcarchive \
+            -archivePath "$ARCHIVE_PATH" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
@@ -54,11 +59,7 @@ jobs:
       - name: Locate and verify app
         run: |
           exec > >(tee verify.log) 2>&1
-          echo "=== 查找 .app 目录 ==="
-          find ./build -name "*.app" -type d 2>/dev/null || echo "(未找到 .app)"
 
-          APP_PATH="./build/MusicApp.xcarchive/Products/Applications/MusicApp.app"
-          echo ""
           echo "=== App 内容 ==="
           ls -la "$APP_PATH" || { echo "❌ 路径不存在"; exit 1; }
 
@@ -68,11 +69,9 @@ jobs:
 
           if [ -n "$EXEC_NAME" ] && [ -f "$APP_PATH/$EXEC_NAME" ]; then
             echo "✅ 可执行文件存在"
-            file "$APP_PATH/$EXEC_NAME"
             lipo -archs "$APP_PATH/$EXEC_NAME" 2>/dev/null || true
           else
             echo "❌ 可执行文件缺失"
-            echo "--- 在归档中全局搜索 MusicApp 可执行文件 ---"
             find ./build -name "$EXEC_NAME" -type f 2>/dev/null || echo "(全库未找到)"
             exit 1
           fi
@@ -93,6 +92,21 @@ jobs:
           check_key UIFileSharingEnabled
           check_key LSSupportsOpeningDocumentsInPlace
           check_key UIBackgroundModes
+          check_key CFBundleDisplayName
+          check_key CFBundleIdentifier
+
+          echo ""
+          echo "=== App 图标校验 ==="
+          if ls "$APP_PATH"/AppIcon*.png >/dev/null 2>&1 || [ -f "$APP_PATH/Assets.car" ]; then
+            echo "✅ 图标已打包："
+            ls -la "$APP_PATH"/AppIcon*.png 2>/dev/null || echo "  (无独立 PNG，图标已编译进 Assets.car)"
+            if [ -f "$APP_PATH/Assets.car" ]; then
+              echo "  Assets.car: $(ls -lh "$APP_PATH/Assets.car" | awk '{print $5}')"
+            fi
+          else
+            echo "❌ 未找到任何图标产物（AppIcon*.png / Assets.car 均缺失）"
+            PLIST_FAIL=1
+          fi
 
           echo ""
           echo "=== 内置音乐目录 ==="
@@ -104,36 +118,34 @@ jobs:
           fi
 
           if [ "$PLIST_FAIL" != "0" ]; then
-            echo "❌ Info.plist 缺少必要配置，文件共享将不可用"
+            echo "❌ 校验未通过"
             exit 1
           fi
 
       - name: Create IPA
         run: |
-          APP_PATH="./build/MusicApp.xcarchive/Products/Applications/MusicApp.app"
-          rm -rf Payload MusicApp.ipa
+          rm -rf Payload "$IPA_NAME"
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
           xattr -cr Payload || true
-          zip -r -X -y MusicApp.ipa Payload
-          zip -d MusicApp.ipa "__MACOSX/*" 2>/dev/null || true
+          zip -r -X -y "$IPA_NAME" Payload
+          zip -d "$IPA_NAME" "__MACOSX/*" 2>/dev/null || true
           rm -rf Payload
 
           echo "=== IPA 内容 ==="
-          unzip -l MusicApp.ipa
+          unzip -l "$IPA_NAME"
           echo ""
-          echo "📦 大小: $(ls -lh MusicApp.ipa | awk '{print $5}')"
+          echo "📦 大小: $(ls -lh "$IPA_NAME" | awk '{print $5}')"
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: MusicApp-Unsigned
-          path: MusicApp.ipa
+          name: Rin-Unsigned
+          path: Rin.ipa
           retention-days: 30
 
       - name: Build Summary
-        run: |
-          echo "🎵 编译完成 MusicApp.ipa"
+        run: echo "🎵 Rin 编译完成"
 
       # 放在最后：任一前置步骤失败都会执行，把日志回传到仓库便于诊断
       - name: Publish diagnostics

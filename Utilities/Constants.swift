@@ -4,7 +4,7 @@ import Foundation
 enum Constants {
 
     /// App 信息
-    static let appName = "MusicApp"
+    static let appName = "Rin"
     static let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
 
     /// 支持的音频格式（m4a / mp4 同为 MP4 容器，AVFoundation 可播放其音轨）
@@ -22,5 +22,5 @@ enum Constants {
     static let coverArtDirectory = "CoverArt"
 
     /// 数据库
-    static let databaseFileName = "music_app.sqlite"
+    static let databaseFileName = "rin.sqlite"
 }

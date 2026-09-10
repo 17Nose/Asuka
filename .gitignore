@@ -16,9 +16,13 @@ DerivedData
 *.ipa
 *.xcuserstate
 
-# XcodeGen
-MusicApp.xcodeproj
-MusicApp.xcworkspace
+# XcodeGen 生成物
+Rin.xcodeproj
+Rin.xcworkspace
+Info.plist
+
+# CI 诊断日志
+BUILD_ERRORS.txt
 
 # Swift Package Manager
 .build/

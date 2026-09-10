@@ -2,7 +2,7 @@ import SwiftUI
 
 /// App 入口
 @main
-struct MusicApp: App {
+struct RinApp: App {
     @StateObject private var playerViewModel = PlayerViewModel()
     @StateObject private var themeManager = ThemeManager.shared
 
@@ -31,8 +31,5 @@ struct MusicApp: App {
         tabAppearance.configureWithDefaultBackground()
         UITabBar.appearance().standardAppearance = tabAppearance
         UITabBar.appearance().scrollEdgeAppearance = tabAppearance
-
-        // 请求媒体库权限（如需访问 Apple Music 本地库）
-        // MPMediaLibrary.requestAuthorization { _ in }
     }
 }
