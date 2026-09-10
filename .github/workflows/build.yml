@@ -51,31 +51,9 @@ jobs:
             ENABLE_PREVIEWS=NO \
             ONLY_ACTIVE_ARCH=NO 2>&1 | tee archive.log
 
-      - name: Show archive errors
-        if: failure()
-        run: |
-          echo "=== 编译错误 ==="
-          grep -E "error:" archive.log | head -30 || echo "(无 error: 行)"
-
-      - name: Publish build errors to repo
-        if: failure()
-        run: |
-          {
-            echo "=== ERRORS ==="
-            grep -E "error:" archive.log | head -80 || true
-            echo ""
-            echo "=== TAIL 120 ==="
-            tail -120 archive.log
-          } > BUILD_ERRORS.txt
-
-          git config user.email "ci@github.com"
-          git config user.name "CI"
-          git add -f BUILD_ERRORS.txt
-          git commit -m "ci: build errors [skip ci]" || true
-          git push || true
-
       - name: Locate and verify app
         run: |
+          exec > >(tee verify.log) 2>&1
           echo "=== 查找 .app 目录 ==="
           find ./build -name "*.app" -type d 2>/dev/null || echo "(未找到 .app)"
 
@@ -156,3 +134,24 @@ jobs:
       - name: Build Summary
         run: |
           echo "🎵 编译完成 MusicApp.ipa"
+
+      # 放在最后：任一前置步骤失败都会执行，把日志回传到仓库便于诊断
+      - name: Publish diagnostics
+        if: failure()
+        run: |
+          {
+            echo "=== 编译错误 (archive.log) ==="
+            grep -E "error:" archive.log 2>/dev/null | head -80 || echo "(无 error: 行)"
+            echo ""
+            echo "=== verify.log ==="
+            cat verify.log 2>/dev/null || echo "(verify 未执行)"
+            echo ""
+            echo "=== archive.log 末尾 60 行 ==="
+            tail -60 archive.log 2>/dev/null || true
+          } > BUILD_ERRORS.txt
+
+          git config user.email "ci@github.com"
+          git config user.name "CI"
+          git add -f BUILD_ERRORS.txt
+          git commit -m "ci: build diagnostics [skip ci]" || true
+          git push || true

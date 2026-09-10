@@ -19,22 +19,37 @@ targets:
       - path: Resources/Music
         type: folder
         buildPhase: resources
+
+    # 显式生成 Info.plist（INFOPLIST_KEY_* 只支持 Xcode 预定义的键，
+    # UIFileSharingEnabled 这类自定义键必须走 info.properties）
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: MusicApp
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+
+        # SwiftUI 生命周期
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+        UILaunchScreen: {}
+
+        # 后台播放
+        UIBackgroundModes:
+          - audio
+
+        # 文件共享：让 Documents 出现在「文件」App / 爱思助手 / Finder
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSAppleMusicUsageDescription: "需要访问您的音乐库以播放本地音乐文件"
+
     settings:
       base:
         SWIFT_VERSION: "5.9"
         PRODUCT_BUNDLE_IDENTIFIER: com.musicapp.player
-
-        GENERATE_INFOPLIST_FILE: "YES"
-        INFOPLIST_KEY_CFBundleDisplayName: "MusicApp"
-        INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
-        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: "YES"
-        INFOPLIST_KEY_UIBackgroundModes: "audio"
-        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait"
-        INFOPLIST_KEY_NSAppleMusicUsageDescription: "需要访问您的音乐库以播放本地音乐文件"
-
-        # 文件共享：让 App 的 Documents 目录出现在「文件」App / Finder / 爱思助手中
-        INFOPLIST_KEY_UIFileSharingEnabled: "YES"
-        INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: "YES"
 
         ENABLE_DEBUG_DYLIB: "NO"
         ENABLE_PREVIEWS: "NO"
@@ -44,6 +59,7 @@ targets:
         CODE_SIGNING_ALLOWED: "NO"
         CODE_SIGN_IDENTITY: ""
         DEVELOPMENT_TEAM: ""
+
     dependencies:
       - package: GRDB
         product: GRDB
