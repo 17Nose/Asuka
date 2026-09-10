@@ -544,16 +544,16 @@ struct TrackRow: View {
     private var coverPlaceholder: some View {
         RoundedRectangle(cornerRadius: 6)
             .fill(isLocal
-                  ? ColorPalette.gradientPrimary.opacity(0.2)
-                  : Color.secondary.opacity(0.1))
+                  ? AnyShapeStyle(ColorPalette.gradientPrimary.opacity(0.2))
+                  : AnyShapeStyle(Color.secondary.opacity(0.1)))
             .frame(width: 40, height: 40)
-            .overlay(
-                Image(systemName: isLocal ? "music.note" : "globe")
-                    .font(.system(size: 14))
-                    .foregroundColor(isLocal
-                                     ? ColorPalette.primary
-                                     : Color.secondary.opacity(0.5))
-            )
+            .overlay(coverIcon)
+    }
+
+    private var coverIcon: some View {
+        Image(systemName: isLocal ? "music.note" : "globe")
+            .font(.system(size: 14))
+            .foregroundColor(isLocal ? ColorPalette.primary : Color.secondary.opacity(0.5))
     }
 
     private var infoSection: some View {
