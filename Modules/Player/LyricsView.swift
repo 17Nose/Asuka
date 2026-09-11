@@ -3,18 +3,15 @@ import SwiftUI
 /// 增强版歌词视图（拖拽定位 + 逐字高亮 + 翻译行 + 在线搜索）
 struct EnhancedLyricsView: View {
     @EnvironmentObject var viewModel: PlayerViewModel
-    /// 逐字高亮需要跟着播放进度走，所以必须观察时钟
-    @ObservedObject private var clock = PlaybackClock.shared
     @Binding var isPresented: Bool
 
     /// 作为播放页的其中一页嵌入时为 true：
     /// 隐去自己的背景与关闭按钮，也不留全屏模式的顶部留白
     var isEmbedded: Bool = false
 
-    @State private var dragOffset: CGFloat = 0
-    @State private var isDragging = false
+    // 注：这里**不**观察 PlaybackClock。歌词列表只需要在「换行」时重绘，
+    // 逐字高亮交给 KaraokeLyricLine 单独处理，否则整个列表每秒重绘 10 次。
     @State private var showSearchSheet = false
-    @State private var selectedSearchResult: LyricsSearchResult?
 
     var body: some View {
         ZStack {
@@ -232,32 +229,53 @@ struct EnhancedLyricsView: View {
 
     // MARK: - 歌词滚动内容
 
+    /// 歌词滚动区
+    ///
+    /// 滚动由 `ScrollViewReader` 驱动：当前行变化时把它滚到容器正中。
+    /// 上下各留「半个容器高」的空白，这样第一句和最后一句也能居中对齐。
     private var lyricsScrollContent: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.vertical, showsIndicators: false) {
-                LazyVStack(spacing: 0) {
-                    // 顶部留白
-                    Color.clear.frame(height: UIScreen.main.bounds.height * 0.35)
+        GeometryReader { geo in
+            let halfHeight = max(80, geo.size.height / 2 - 36)
 
-                    ForEach(Array(viewModel.displayLyrics.enumerated()), id: \.element.id) { index, line in
-                        if !line.text.isEmpty {
-                            lyricRowView(index: index, line: line)
-                                .id(index)
+            ScrollViewReader { proxy in
+                ScrollView(.vertical, showsIndicators: false) {
+                    LazyVStack(spacing: 0) {
+                        Color.clear.frame(height: halfHeight)
+
+                        ForEach(viewModel.displayLyrics) { line in
+                            if !line.text.isEmpty {
+                                lyricRow(line)
+                                    .id(line.index)
+                            }
                         }
-                    }
 
-                    // 底部留白
-                    Color.clear.frame(height: UIScreen.main.bounds.height * 0.35)
+                        Color.clear.frame(height: halfHeight)
+                    }
+                }
+                .mask(lyricsGradientMask)
+                .onChange(of: viewModel.currentLyricIndex) { newIndex in
+                    scrollToCurrent(proxy: proxy, index: newIndex, animated: true)
+                }
+                .onAppear {
+                    scrollToCurrent(proxy: proxy, index: viewModel.currentLyricIndex, animated: false)
                 }
             }
-            .simultaneousGesture(lyricsDragGesture)
-            .mask(lyricsGradientMask)
-            .onChange(of: viewModel.currentLyricIndex) { newIdx in
-                guard !isDragging, let idx = newIdx else { return }
-                let targetIndex = idx + 5
-                withAnimation(.easeInOut(duration: 0.4)) {
-                    proxy.scrollTo(targetIndex, anchor: .center)
+        }
+    }
+
+    /// 把当前行滚到正中
+    private func scrollToCurrent(proxy: ScrollViewProxy, index: Int?, animated: Bool) {
+        guard let index = index else { return }
+        let target = LRCParser.displayIndex(ofLyricIndex: index)
+
+        // 行可能还没被 LazyVStack 创建出来，放到下一轮 runloop 再滚
+        DispatchQueue.main.async {
+            if animated {
+                withAnimation(.easeInOut(duration: 0.45)) {
+                    proxy.scrollTo(target, anchor: .center)
                 }
+            } else {
+                proxy.scrollTo(target, anchor: .center)
             }
         }
     }
@@ -265,147 +283,69 @@ struct EnhancedLyricsView: View {
     // MARK: - 单行歌词
 
     @ViewBuilder
-    private func lyricRowView(index: Int, line: DisplayLyricLine) -> some View {
-        VStack(spacing: 4) {
-            // 逐字高亮的歌词行
-            if line.words.isEmpty {
-                // 普通文本显示
+    private func lyricRow(_ line: DisplayLyricLine) -> some View {
+        let isCurrent = line.isCurrent
+        let currentDisplayIndex = (viewModel.currentLyricIndex ?? -1) + 5
+        let distance = abs(line.index - currentDisplayIndex)
+        let accent = ColorPalette.primary
+
+        VStack(spacing: 3) {
+            if isCurrent, !line.words.isEmpty {
+                // 当前行带逐字时间轴 → 交给独立子视图做卡拉OK高亮
+                KaraokeLyricLine(words: line.words, lineStartTime: lineStartTime)
+            } else {
                 Text(line.text)
                     .font(.system(
-                        size: line.isCurrent ? 22 : 15,
-                        weight: line.isCurrent ? .bold : .regular,
+                        size: isCurrent ? 22 : 16,
+                        weight: isCurrent ? .bold : .regular,
                         design: .rounded
                     ))
-                    .foregroundColor(lyricColor(isCurrent: line.isCurrent, isPast: line.isPast))
-                    .scaleEffect(line.isCurrent ? 1.08 : 0.95)
-                    .blur(radius: line.isCurrent ? 0 : 0.3)
-            } else {
-                // 逐字高亮显示
-                wordByWordText(line: line)
+                    .foregroundColor(lyricColor(distance: distance, isCurrent: isCurrent))
+                    .shadow(color: isCurrent ? .black.opacity(0.45) : .clear, radius: 8)
             }
 
-            // 翻译行
             if let translation = line.translation, !translation.isEmpty {
                 Text(translation)
                     .font(.system(size: 13, design: .rounded))
-                    .foregroundColor(
-                        line.isCurrent
-                            ? Color.white.opacity(0.5)
-                            : .white.opacity(0.2)
-                    )
-                    .padding(.top, 2)
+                    .foregroundColor(isCurrent ? .white.opacity(0.55) : .white.opacity(0.2))
             }
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 40)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 32)
         .frame(maxWidth: .infinity)
         .multilineTextAlignment(.center)
-        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: line.isCurrent)
+        // 当前行略微放大 —— 行高固定，靠 scale 不会挤动其他行
+        .scaleEffect(isCurrent ? 1.04 : 0.97, anchor: .center)
+        .animation(.spring(response: 0.42, dampingFraction: 0.78), value: isCurrent)
+        .contentShape(Rectangle())
         .onTapGesture {
-            // 点击歌词行跳转到对应时间
-            if !line.isCurrent, let idx = viewModel.currentLyricIndex {
-                let tapIndex = index - 5 // 减去 paddingLines
-                if tapIndex >= 0, tapIndex < viewModel.lyricLines.count {
-                    let targetTime = viewModel.lyricLines[tapIndex].time
-                    HapticStyle.selection.trigger()
-                    viewModel.seek(to: targetTime)
-                }
-            }
+            seekToLyric(at: line.index - 5)
         }
     }
 
-    /// 逐字高亮文本
-    @ViewBuilder
-    private func wordByWordText(line: DisplayLyricLine) -> some View {
-        let currentTime = clock.currentTime
-        // 找到当前行的开始时间
-        let lineStartTime: TimeInterval = {
-            if let idx = viewModel.currentLyricIndex,
-               idx < viewModel.lyricLines.count {
-                return viewModel.lyricLines[idx].time
-            }
-            return 0
-        }()
-
-        let lineElapsed = currentTime - lineStartTime
-        let currentWordIdx = LRCParser.findCurrentWordIndex(
-            words: line.words,
-            lineElapsed: lineElapsed
-        )
-
-        // 构建富文本
-        let attributedString = buildAttributedLyric(
-            words: line.words,
-            currentWordIndex: currentWordIdx,
-            isCurrent: line.isCurrent,
-            isPast: line.isPast
-        )
-
-        Text(attributedString)
-            .font(.system(
-                size: line.isCurrent ? 22 : 15,
-                weight: line.isCurrent ? .bold : .regular,
-                design: .rounded
-            ))
-            .scaleEffect(line.isCurrent ? 1.08 : 0.95)
+    /// 当前行的起始时间（逐字高亮需要）
+    private var lineStartTime: TimeInterval {
+        guard let index = viewModel.currentLyricIndex,
+              index >= 0, index < viewModel.lyricLines.count else { return 0 }
+        return viewModel.lyricLines[index].time
     }
 
-    private func buildAttributedLyric(
-        words: [WordTiming],
-        currentWordIndex: Int?,
-        isCurrent: Bool,
-        isPast: Bool
-    ) -> AttributedString {
-        var result = AttributedString()
+    /// 点击歌词跳转到对应时间
+    private func seekToLyric(at index: Int) {
+        guard index >= 0, index < viewModel.lyricLines.count else { return }
+        HapticStyle.selection.trigger()
+        viewModel.seek(to: viewModel.lyricLines[index].time)
+    }
 
-        let baseColor = lyricUIColor(isCurrent: isCurrent, isPast: isPast)
-        let highlightColor = isCurrent ? UIColor.white : UIColor.white.withAlphaComponent(0.7)
-
-        for (i, word) in words.enumerated() {
-            var part = AttributedString(word.text)
-            if i == currentWordIndex && isCurrent {
-                part.foregroundColor = highlightColor
-                part.font = .systemFont(ofSize: 23, weight: .bold)
-            } else {
-                part.foregroundColor = baseColor
-            }
-            result += part
+    /// 距离当前行越远越淡（Apple Music / 网易云的观感）
+    private func lyricColor(distance: Int, isCurrent: Bool) -> Color {
+        if isCurrent { return .white }
+        switch distance {
+        case 1:  return .white.opacity(0.5)
+        case 2:  return .white.opacity(0.34)
+        case 3:  return .white.opacity(0.22)
+        default: return .white.opacity(0.14)
         }
-
-        return result
-    }
-
-    // MARK: - 拖拽手势（手动定位歌词）
-
-    private var lyricsDragGesture: some Gesture {
-        DragGesture()
-            .onChanged { value in
-                isDragging = true
-                dragOffset = value.translation.height
-            }
-            .onEnded { value in
-                isDragging = false
-
-                // 如果拖拽距离超过阈值，调整歌词位置
-                let threshold: CGFloat = 30
-                if abs(value.translation.height) > threshold {
-                    // 根据拖拽方向调整当前歌词行
-                    let direction = value.translation.height > 0 ? -1 : 1
-                    if let current = viewModel.currentLyricIndex {
-                        let newIndex = max(0, min(
-                            viewModel.lyricLines.count - 1,
-                            current + direction
-                        ))
-                        let targetTime = viewModel.lyricLines[newIndex].time
-                        HapticStyle.selection.trigger()
-                        viewModel.seek(to: targetTime)
-                    }
-                }
-
-                withAnimation {
-                    dragOffset = 0
-                }
-            }
     }
 
     // MARK: - 渐变遮罩
@@ -428,18 +368,44 @@ struct EnhancedLyricsView: View {
         }
     }
 
-    // MARK: - 颜色辅助
+}
 
-    private func lyricColor(isCurrent: Bool, isPast: Bool) -> Color {
-        if isCurrent { return .white }
-        return isPast ? .white.opacity(0.22) : .white.opacity(0.55)
+// MARK: - 卡拉OK高亮行
+
+/// 当前歌词行：按逐字时间轴做「已唱/未唱」的高亮
+///
+/// 单独拆成一个视图，是因为它必须跟着播放进度刷新（10Hz）。
+/// 如果让整个歌词列表都观察时钟，每秒会重建上百行文本 —— 直接卡死。
+/// 这里只有当前这一行会以 10Hz 重绘。
+private struct KaraokeLyricLine: View {
+    @ObservedObject private var clock = PlaybackClock.shared
+
+    let words: [WordTiming]
+    let lineStartTime: TimeInterval
+
+    var body: some View {
+        Text(attributed)
+            .font(.system(size: 22, weight: .bold, design: .rounded))
+            .multilineTextAlignment(.center)
+            .shadow(color: .black.opacity(0.45), radius: 8)
     }
 
-    private func lyricUIColor(isCurrent: Bool, isPast: Bool) -> UIColor {
-        if isCurrent { return .white }
-        return isPast
-            ? UIColor.white.withAlphaComponent(0.22)
-            : UIColor.white.withAlphaComponent(0.55)
+    private var attributed: AttributedString {
+        let elapsed = clock.currentTime - lineStartTime
+        let sungIndex = LRCParser.findCurrentWordIndex(words: words, lineElapsed: elapsed)
+
+        var result = AttributedString()
+        for (index, word) in words.enumerated() {
+            var part = AttributedString(word.text)
+            let isSung = sungIndex.map { index <= $0 } ?? false
+            // 显式写 UIColor，避免 AttributedString 在 SwiftUI / UIKit 两个
+            // attribute scope 之间产生歧义
+            part.foregroundColor = isSung
+                ? UIColor.white
+                : UIColor.white.withAlphaComponent(0.42)
+            result += part
+        }
+        return result
     }
 }
 

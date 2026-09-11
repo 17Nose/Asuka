@@ -38,13 +38,20 @@ struct LyricsMetadata {
 }
 
 /// 用于 UI 显示的歌词行
+///
+/// ⚠️ `id` 必须是**稳定**的（这里用行在数组中的位置）。
+/// 早期版本写的是 `let id = UUID()`，每次刷新都会生成全新的 id，
+/// 导致 SwiftUI 认为整个列表被替换 —— 表现就是歌词滚动跳来跳去、
+/// 并且每次刷新都重建整份列表（严重掉帧）。
 struct DisplayLyricLine: Identifiable {
-    let id = UUID()
+    let index: Int
     let text: String
     let words: [WordTiming]
     let translation: String?
     let isCurrent: Bool
     let isPast: Bool
+
+    var id: Int { index }
 }
 
 // MARK: - LRC 歌词解析器（增强版）
@@ -358,32 +365,43 @@ struct LRCParser {
         currentTime: TimeInterval = 0,
         paddingLines: Int = 5
     ) -> [DisplayLyricLine] {
-        var display: [DisplayLyricLine] = []
         guard !lines.isEmpty else { return [] }
 
+        var display: [DisplayLyricLine] = []
+        display.reserveCapacity(lines.count + paddingLines * 2)
+
         for _ in 0..<paddingLines {
-            display.append(DisplayLyricLine(text: "", words: [], translation: nil, isCurrent: false, isPast: true))
+            display.append(DisplayLyricLine(
+                index: display.count, text: "", words: [], translation: nil,
+                isCurrent: false, isPast: true
+            ))
         }
 
         let activeIdx = currentIndex ?? -1
         for (index, line) in lines.enumerated() {
-            let isCurrent = index == activeIdx
-            let elapsed = isCurrent ? currentTime - line.time : 0
-
             display.append(DisplayLyricLine(
+                index: display.count,
                 text: line.text,
-                words: elapsed > 0 ? line.words : line.words,
+                words: line.words,
                 translation: line.translation,
-                isCurrent: isCurrent,
+                isCurrent: index == activeIdx,
                 isPast: index < activeIdx
             ))
         }
 
         for _ in 0..<paddingLines {
-            display.append(DisplayLyricLine(text: "", words: [], translation: nil, isCurrent: false, isPast: false))
+            display.append(DisplayLyricLine(
+                index: display.count, text: "", words: [], translation: nil,
+                isCurrent: false, isPast: false
+            ))
         }
 
         return display
+    }
+
+    /// 当前歌词行在 `displayLines` 结果里的位置（用于滚动定位）
+    static func displayIndex(ofLyricIndex index: Int, paddingLines: Int = 5) -> Int {
+        index + paddingLines
     }
 
     /// 格式化时间标签

@@ -12,8 +12,19 @@ struct MusicProgressSlider: View {
     @State private var dragProgress: CGFloat = 0
     @State private var hapticFeedback = UIImpactFeedbackGenerator(style: .light)
 
+    /// 把手直径。常量 —— 放大只走 scaleEffect，避免布局尺寸变化引起位移
+    private static let knobSize: CGFloat = 16
+
     private var displayProgress: CGFloat {
         isDragging ? dragProgress : progress
+    }
+
+    /// 把手的水平偏移量
+    /// - 进度 0 → 0（把手中心在轨道起点）
+    /// - 进度 1 → trackWidth - knobSize（把手中心在轨道终点）
+    private func knobOffset(trackWidth: CGFloat, progress: CGFloat) -> CGFloat {
+        let usable = max(0, trackWidth - Self.knobSize)
+        return usable * min(max(progress, 0), 1)
     }
 
     var body: some View {
@@ -75,17 +86,22 @@ struct MusicProgressSlider: View {
                 }
 
                 // 滑块把手
+                //
+                // 关键：frame 尺寸**保持常量**，放大只走 scaleEffect。
+                // 之前写的是 `.frame(width: isDragging ? 22 : 16)`，尺寸一变，
+                // ZStack 里左对齐的子视图中心就右移了几个点，再叠加 scaleEffect，
+                // 表现就是「拖动时把手一边变大一边往右跑」。
                 Circle()
                     .fill(Color.white)
-                    .frame(width: isDragging ? 22 : 16, height: isDragging ? 22 : 16)
-                    .shadow(color: .black.opacity(0.2), radius: isDragging ? 6 : 3, x: 0, y: 2)
+                    .frame(width: Self.knobSize, height: Self.knobSize)
                     .overlay(
                         Circle()
                             .stroke(ColorPalette.primary, lineWidth: 2)
                     )
-                    .offset(x: max(0, min(geo.size.width - 16, geo.size.width * displayProgress - 8)))
-                    .scaleEffect(isDragging ? 1.3 : 1.0)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isDragging)
+                    .shadow(color: .black.opacity(0.25), radius: isDragging ? 6 : 3, x: 0, y: 2)
+                    .scaleEffect(isDragging ? 1.35 : 1.0)
+                    .offset(x: knobOffset(trackWidth: geo.size.width, progress: displayProgress))
+                    .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isDragging)
             }
             .gesture(
                 DragGesture(minimumDistance: 0)

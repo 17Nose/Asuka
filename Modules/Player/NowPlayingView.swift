@@ -137,13 +137,16 @@ struct NowPlayingView: View {
                     endPoint: .bottom
                 )
 
-                // 动态光晕
+                // 装饰性光晕（静态）
+                //
+                // 这里原来是 floatingAnimation 持续飘动的大面积模糊圆，
+                // 意味着每一帧都要重新合成一块 350pt、blur 80 的图层 ——
+                // 纯粹装饰却极其吃 GPU。改成静止后视觉几乎无差别，帧率明显改善。
                 Circle()
                     .fill(ColorPalette.primary.opacity(0.08))
                     .frame(width: 350, height: 350)
                     .blur(radius: 80)
                     .offset(y: -100)
-                    .floatingAnimation(isActive: true, amplitude: 20)
             }
             .ignoresSafeArea()
         } else {
@@ -151,20 +154,17 @@ struct NowPlayingView: View {
                 ColorPalette.gradientPrimary
                     .ignoresSafeArea()
 
-                // 装饰性光晕
                 Circle()
                     .fill(Color.white.opacity(0.05))
                     .frame(width: 300, height: 300)
                     .blur(radius: 60)
                     .offset(x: 100, y: -200)
-                    .floatingAnimation(isActive: true, amplitude: 30)
 
                 Circle()
                     .fill(ColorPalette.secondary.opacity(0.05))
                     .frame(width: 250, height: 250)
                     .blur(radius: 60)
                     .offset(x: -80, y: 100)
-                    .floatingAnimation(isActive: true, amplitude: -20)
             }
             .ignoresSafeArea()
         }
@@ -192,28 +192,11 @@ struct NowPlayingView: View {
 
             Spacer()
 
-            // 播放 / 歌词 页切换
-            Button(action: {
-                HapticStyle.medium.trigger()
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    page = (page == 1) ? 0 : 1
-                }
-            }) {
-                Label(
-                    page == 1 ? "播放" : "歌词",
-                    systemImage: page == 1 ? "play.circle.fill" : "text.bubble"
-                )
-                .font(.system(size: 13, weight: .medium))
-                // 不要按"有没有歌词"禁用 —— 正是没歌词时才最需要进来用在线搜索
-                .foregroundColor(page == 1 ? ColorPalette.primary : .white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(.ultraThinMaterial)
-                .clipShape(Capsule())
-                .overlay(
-                    Capsule().stroke(.white.opacity(0.15), lineWidth: 1)
-                )
-            }
+            // 中间抓手：既是「可下拉关闭」的视觉提示，
+            // 也让这一整条顶部栏成为可拖拽区域
+            Capsule()
+                .fill(.white.opacity(0.28))
+                .frame(width: 40, height: 5)
 
             Spacer()
 
@@ -262,6 +245,23 @@ struct NowPlayingView: View {
                     .clipShape(Circle())
             }
         }
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+        .padding(.bottom, 6)
+        .contentShape(Rectangle())
+        // 下拉关闭只挂在顶部栏这一条 ——
+        // 页面中间是左右翻页的 TabView，在那里挂拖拽手势会抢掉系统翻页
+        .gesture(
+            DragGesture(minimumDistance: 20)
+                .onEnded { value in
+                    let dy = value.translation.height
+                    let dx = value.translation.width
+                    if dy > 55 && abs(dx) < abs(dy) {
+                        HapticStyle.light.trigger()
+                        dismiss()
+                    }
+                }
+        )
     }
 
     // MARK: - 增强版专辑封面
@@ -300,57 +300,34 @@ struct NowPlayingView: View {
 
     // MARK: - 毛玻璃歌曲信息卡片
 
+    /// 歌曲信息（歌名 / 歌手 / 专辑）
+    ///
+    /// 刻意**不加**卡片背景 —— 播放页整块都是沉浸式背景，
+    /// 再叠一层纯色/毛玻璃会显得很脏（参考网易云、Apple Music 都是纯文字压在背景上）。
     private var songInfoCard: some View {
-        ImmersiveCard(cornerRadius: 20) {
-            VStack(spacing: 6) {
-                if let song = viewModel.currentSong {
-                    // 歌名（滚动跑马灯如果太长）
-                    Text(song.title)
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundColor(.white)
+        VStack(spacing: 6) {
+            if let song = viewModel.currentSong {
+                Text(song.title)
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                    .id(song.id)
+                    .transition(.opacity.combined(with: .move(edge: .leading)))
+
+                Text(song.displayArtist)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.white.opacity(0.7))
+                    .lineLimit(1)
+
+                if !song.album.isEmpty {
+                    Text(song.album)
+                        .font(.system(size: 13))
+                        .foregroundColor(.white.opacity(0.5))
                         .lineLimit(1)
-                        .id(song.id)
-                        .transition(.opacity.combined(with: .move(edge: .leading)))
-
-                    // 歌手
-                    Text(song.displayArtist)
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.white.opacity(0.7))
-                        .lineLimit(1)
-
-                    // 专辑 + 音质标签
-                    HStack(spacing: 8) {
-                        if !song.album.isEmpty {
-                            Text(song.album)
-                                .font(.system(size: 13))
-                                .foregroundColor(.white.opacity(0.5))
-                                .lineLimit(1)
-                        }
-
-                        // 格式标签
-                        Text(song.format.uppercased())
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.7))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.white.opacity(0.1))
-                            .cornerRadius(4)
-
-                        // 音质标签
-                        if song.bitrate > 320 {
-                            Text("Hi-Res")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundColor(.yellow)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.yellow.opacity(0.15))
-                                .cornerRadius(4)
-                        }
-                    }
                 }
             }
-            .padding(.vertical, 8)
         }
+        .padding(.vertical, 4)
     }
 
     // MARK: - 增强版播放控制
@@ -478,7 +455,7 @@ struct NowPlayingView: View {
         let song = viewModel.currentSong
         let isFavorite = song.map { viewModel.isFavorite($0) } ?? false
 
-        return ImmersiveCard(cornerRadius: 16) {
+        return Group {
             HStack(spacing: 0) {
                 ActionButton(
                     icon: isFavorite ? "heart.fill" : "heart",
@@ -517,7 +494,7 @@ struct NowPlayingView: View {
                     actionLabel(icon: "ellipsis.circle", label: "更多")
                 }
             }
-            .padding(.vertical, 10)
+            .padding(.vertical, 8)
             .padding(.horizontal, 6)
         }
         .sheet(isPresented: $showQueue) {

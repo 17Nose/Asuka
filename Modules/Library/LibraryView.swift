@@ -7,7 +7,6 @@ struct LibraryView: View {
     @ObservedObject var theme = ThemeManager.shared
     @State private var selectedTab: LibraryTab = .recommend
     @State private var isSearching = false
-    @State private var headerOffset: CGFloat = 0
     @State private var showScanAnimation = false
     @State private var showImporter = false
     @State private var importResultMessage: String?
@@ -71,14 +70,75 @@ struct LibraryView: View {
                     .zIndex(10)
             }
 
-            // 迷你播放条 —— 放在 NavigationStack 外层，
-            // 这样 push 到歌手/专辑详情页时它依然常驻（此前会被整个替换掉）
-            MiniPlayerView()
-                .environmentObject(viewModel)
-                .zIndex(5)
+            // 迷你播放条 + 底部标签栏
+            //
+            // 都放在 NavigationStack 外层：这样 push 到歌手/专辑详情页时它们依然常驻
+            VStack(spacing: 0) {
+                MiniPlayerView()
+                    .environmentObject(viewModel)
+
+                floatingTabBar
+            }
+            .zIndex(5)
         }
         .animation(.easeInOut(duration: 0.3), value: isSearching)
         .animation(.easeInOut(duration: 0.3), value: viewModel.isScanning)
+    }
+
+    // MARK: - 底部悬浮标签栏（液态玻璃）
+
+    private var floatingTabBar: some View {
+        HStack(spacing: 2) {
+            ForEach(LibraryTab.allCases, id: \.self) { tab in
+                Button {
+                    HapticStyle.selection.trigger()
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        selectedTab = tab
+                    }
+                } label: {
+                    VStack(spacing: 3) {
+                        Image(systemName: tab.icon)
+                            .font(.system(size: 17, weight: .medium))
+                        Text(tab.rawValue)
+                            .font(.system(size: 10, weight: .medium))
+                    }
+                    .foregroundColor(selectedTab == tab ? ColorPalette.primary : theme.textSecondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 7)
+                    .background(
+                        Group {
+                            if selectedTab == tab {
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(ColorPalette.primary.opacity(0.14))
+                            }
+                        }
+                    )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 5)
+        .background(
+            // 液态玻璃质感：毛玻璃底 + 斜向高光描边 + 柔和投影
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .stroke(
+                            LinearGradient(
+                                colors: [.white.opacity(0.5), .white.opacity(0.06)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                )
+                .shadow(color: .black.opacity(0.14), radius: 18, y: 6)
+        )
+        .padding(.horizontal, 16)
+        .padding(.bottom, 2)
     }
 
     // MARK: - 导航栈根内容
@@ -86,13 +146,6 @@ struct LibraryView: View {
     private var rootContent: some View {
         VStack(spacing: 0) {
             headerBar
-
-            // Tab 选择器（视差效果）
-            tabPicker
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .offset(y: headerOffset * -0.3)
-                .opacity(1 - max(0, headerOffset / 100))
 
             // 内容区
             if isSearching && !viewModel.searchQuery.isEmpty {
@@ -102,7 +155,8 @@ struct LibraryView: View {
                 tabContent
             }
 
-            Spacer(minLength: 66) // 为 mini player 留空间
+            // 给底部的迷你播放条 + 悬浮标签栏留出空间
+            Spacer(minLength: 130)
         }
     }
 
@@ -260,57 +314,6 @@ struct LibraryView: View {
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-    }
-
-    // MARK: - Tab 选择器（胶囊样式）
-
-    private var tabPicker: some View {
-        HStack(spacing: 6) {
-            ForEach(LibraryTab.allCases, id: \.self) { tab in
-                Button(action: {
-                    HapticStyle.selection.trigger()
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                        selectedTab = tab
-                    }
-                }) {
-                    HStack(spacing: 5) {
-                        Image(systemName: tab.icon)
-                            .font(.system(size: 12, weight: .medium))
-                        Text(tab.rawValue)
-                            .font(.system(size: 13, weight: .medium))
-                    }
-                    .foregroundColor(selectedTab == tab ? .white : theme.textSecondary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(
-                        Capsule()
-                            .fill(
-                                selectedTab == tab
-                                    ? ColorPalette.primary
-                                    : theme.surfaceColor
-                            )
-                            .shadow(
-                                color: selectedTab == tab
-                                    ? ColorPalette.primary.opacity(0.3)
-                                    : .clear,
-                                radius: 6,
-                                y: 2
-                            )
-                    )
-                }
-                .buttonStyle(.plain)
-
-                if tab != LibraryTab.allCases.last {
-                    Spacer(minLength: 0)
-                }
-            }
-        }
-        .padding(6)
-        .background(
-            Capsule()
-                .fill(theme.surfaceColor)
-                .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
-        )
     }
 
     // MARK: - Tab 内容
