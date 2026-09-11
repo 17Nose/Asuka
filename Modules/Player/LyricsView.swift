@@ -7,6 +7,10 @@ struct EnhancedLyricsView: View {
     @ObservedObject private var clock = PlaybackClock.shared
     @Binding var isPresented: Bool
 
+    /// 作为播放页的其中一页嵌入时为 true：
+    /// 隐去自己的背景与关闭按钮，也不留全屏模式的顶部留白
+    var isEmbedded: Bool = false
+
     @State private var dragOffset: CGFloat = 0
     @State private var isDragging = false
     @State private var showSearchSheet = false
@@ -14,31 +18,33 @@ struct EnhancedLyricsView: View {
 
     var body: some View {
         ZStack {
-            // 背景层
-            backgroundLayer
+            if !isEmbedded {
+                backgroundLayer
+            }
 
-            // 歌词滚动内容
             VStack(spacing: 0) {
-                // 顶部控制栏
-                lyricsHeaderBar
-                    .padding(.horizontal, 20)
-                    .padding(.top, 56)
-
-                Spacer()
+                if isEmbedded {
+                    embeddedToolbar
+                } else {
+                    lyricsHeaderBar
+                        .padding(.horizontal, 20)
+                        .padding(.top, 56)
+                    Spacer()
+                }
 
                 if viewModel.isSearchingLyrics {
-                    // 加载状态
                     loadingState
                 } else if viewModel.displayLyrics.isEmpty {
-                    // 空歌词状态
                     emptyLyricsState
                 } else {
-                    // 歌词滚动区
                     lyricsScrollContent
                 }
 
-                Spacer()
+                if !isEmbedded {
+                    Spacer()
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .sheet(isPresented: $showSearchSheet) {
             LyricsSearchSheet(
@@ -46,6 +52,39 @@ struct EnhancedLyricsView: View {
                 isPresented: $showSearchSheet
             )
         }
+    }
+
+    // MARK: - 嵌入模式的紧凑工具栏
+
+    /// 嵌入播放页时用它代替全屏顶部栏（保留在线搜索入口）
+    private var embeddedToolbar: some View {
+        HStack(spacing: 12) {
+            if !viewModel.displayLyrics.isEmpty {
+                Text(viewModel.lyricsSourceLabel)
+                    .font(.system(size: 12))
+                    .foregroundColor(.white.opacity(0.45))
+            }
+
+            Spacer()
+
+            Button {
+                HapticStyle.light.trigger()
+                showSearchSheet = true
+            } label: {
+                Label("在线搜索", systemImage: "globe")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(.white.opacity(0.15), lineWidth: 1))
+            }
+            .buttonStyle(BouncyButtonStyle(scale: 0.9))
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 6)
+        .padding(.bottom, 2)
     }
 
     // MARK: - 背景层

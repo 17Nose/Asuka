@@ -68,6 +68,65 @@ final class LyricsFetcher {
     }
 
     /// 下载歌词内容
+    // MARK: - 挑选最匹配的结果
+
+    /// 从搜索结果里挑最匹配的一条
+    ///
+    /// 只按「时长最接近」排序很容易选中翻唱版（翻唱时长往往也接近），
+    /// 所以要综合歌名、歌手、时长三项打分。
+    func bestMatch(for song: Song, in results: [LyricsSearchResult]) -> LyricsSearchResult? {
+        guard !results.isEmpty else { return nil }
+        let wantTitle = normalize(song.title)
+        let wantArtist = normalize(song.artist)
+
+        return results.max { lhs, rhs in
+            score(lhs, wantTitle, wantArtist, song.duration)
+                < score(rhs, wantTitle, wantArtist, song.duration)
+        }
+    }
+
+    private func score(
+        _ result: LyricsSearchResult,
+        _ wantTitle: String,
+        _ wantArtist: String,
+        _ wantDuration: TimeInterval
+    ) -> Double {
+        var value = 0.0
+
+        // 歌名
+        let title = normalize(result.title)
+        if title == wantTitle { value += 100 }
+        else if title.contains(wantTitle) || wantTitle.contains(title) { value += 55 }
+        else { value -= 30 }
+
+        // 歌手
+        let artist = normalize(result.artist)
+        if !wantArtist.isEmpty && !artist.isEmpty {
+            if artist == wantArtist { value += 100 }
+            else if artist.contains(wantArtist) || wantArtist.contains(artist) { value += 70 }
+            else {
+                // 歌名对得上但歌手完全不符 —— 基本是翻唱
+                value -= 45
+            }
+        }
+
+        // 时长
+        if wantDuration > 0 {
+            let diff = abs(result.duration - wantDuration)
+            if diff < 3 { value += 30 }
+            else if diff < 8 { value += 10 }
+            else if diff > 20 { value -= 25 }
+        }
+
+        return value
+    }
+
+    private func normalize(_ text: String) -> String {
+        text.lowercased()
+            .replacingOccurrences(of: " ", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// 下载歌词
     ///
     /// ⚠️ 三个音乐源返回的格式**完全不同**，必须分开解析：
@@ -173,29 +232,28 @@ final class LyricsFetcher {
 
         struct NeteaseResponse: Codable {
             struct Result: Codable {
-                struct SongsWrapper: Codable {
-                    struct Song: Codable {
-                        let id: Int
+                struct Song: Codable {
+                    let id: Int
+                    let name: String
+                    struct Artist: Codable {
                         let name: String
-                        struct Artist: Codable {
-                            let name: String
-                        }
-                        let artists: [Artist]
-                        struct Album: Codable {
-                            let name: String
-                        }
-                        let album: Album
-                        let duration: Int  // 毫秒
                     }
-                    let songs: [Song]?
+                    let artists: [Artist]
+                    struct Album: Codable {
+                        let name: String
+                    }
+                    let album: Album
+                    let duration: Int  // 毫秒
                 }
-                let songs: SongsWrapper?
+                /// 注意：这里**直接是数组**，不是 { songs: [...] } 包一层。
+                /// 早期写成 SongsWrapper 导致解码永远失败、被 try? 吞掉。
+                let songs: [Song]?
             }
             let result: Result?
         }
 
         let neteaseResp = try JSONDecoder().decode(NeteaseResponse.self, from: data)
-        guard let songs = neteaseResp.result?.songs?.songs else { return [] }
+        guard let songs = neteaseResp.result?.songs else { return [] }
 
         return songs.compactMap { song in
             let songDuration = TimeInterval(song.duration) / 1000.0
@@ -278,7 +336,8 @@ final class LyricsFetcher {
                             let name: String
                         }
                     }
-                    let song: [SongInfo]?
+                    /// 注意：字段名是 list，不是 song
+                    let list: [SongInfo]?
                 }
                 let song: Song?
             }
@@ -286,7 +345,7 @@ final class LyricsFetcher {
         }
 
         let qqResp = try JSONDecoder().decode(QQResponse.self, from: data)
-        guard let songs = qqResp.data?.song?.song else { return [] }
+        guard let songs = qqResp.data?.song?.list else { return [] }
 
         return songs.compactMap { song in
             // 没有 songmid 就无法取歌词，直接跳过

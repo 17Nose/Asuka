@@ -10,6 +10,9 @@ struct NowPlayingView: View {
     @State private var waveformSamples: [CGFloat] = []
     @State private var coverScale: CGFloat = 1.0
 
+    /// 当前页：0 = 播放器，1 = 歌词
+    @State private var page: Int = 0
+
     // MARK: - Body
 
     var body: some View {
@@ -17,80 +20,97 @@ struct NowPlayingView: View {
             // 动态背景层
             backgroundLayer
 
-            // 主内容
             VStack(spacing: 0) {
-                // 顶部栏
                 headerBar
                     .padding(.horizontal, 20)
                     .padding(.top, 8)
 
-                // 可滚动内容
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 28) {
-                        // 专辑封面区域（增强版）
-                        enhancedAlbumArtSection
-                            .padding(.top, 12)
-
-                        // 歌曲信息（毛玻璃卡片）
-                        songInfoCard
-                            .padding(.horizontal, 32)
-
-                        // 自定义进度条（带波形）
-                        ProgressSection(
-                            waveformSamples: waveformSamples,
-                            onSeek: { time in viewModel.seek(to: time) }
-                        )
-                        .padding(.horizontal, 32)
-
-                        // 播放控制
-                        enhancedControlsSection
-                            .padding(.horizontal, 32)
-
-                        // 底部操作栏（毛玻璃卡片）
-                        actionCard
-                            .padding(.horizontal, 32)
-                            .padding(.top, 4)
-                    }
-                    .padding(.bottom, 20)
+                // 左右滑动切页：左=播放器，右=歌词
+                //
+                // 用 TabView 的 page 模式而不是自己写手势：
+                // 系统实现天然处理了与内部滚动、进度条拖动的手势竞争。
+                TabView(selection: $page) {
+                    playerPage
+                        .tag(0)
+                    lyricsPage
+                        .tag(1)
                 }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+
+                pageIndicator
 
                 // 实时频谱条
                 if viewModel.playbackState == .playing {
                     LiveSpectrumView(isPlaying: true)
-                        .frame(height: 32)
+                        .frame(height: 26)
                         .padding(.horizontal, 40)
-                        .padding(.bottom, 8)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
-            }
 
-            // 歌词覆盖层（增强版：逐字高亮 + 翻译 + 在线搜索）
-            if showLyrics {
-                EnhancedLyricsView(isPresented: $showLyrics)
-                    .environmentObject(viewModel)
-                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                // 以下为两页共用：进度、控制、操作
+                ProgressSection(
+                    waveformSamples: waveformSamples,
+                    onSeek: { time in viewModel.seek(to: time) }
+                )
+                .padding(.horizontal, 32)
+                .padding(.top, 6)
+
+                enhancedControlsSection
+                    .padding(.horizontal, 32)
+                    .padding(.top, 10)
+
+                actionCard
+                    .padding(.horizontal, 32)
+                    .padding(.top, 8)
+                    .padding(.bottom, 6)
             }
         }
-        .animation(.easeInOut(duration: 0.35), value: showLyrics)
         .animation(.easeInOut(duration: 0.4), value: viewModel.playbackState)
         // 强制深色：这是沉浸式深色界面，且能让 .ultraThinMaterial 渲染成深色，
         // 否则浅色模式下白色图标压在浅色毛玻璃上会看不见（返回键曾因此"消失"）
         .environment(\.colorScheme, .dark)
-        // 下滑关闭（纵向为主的手势才触发，避免和进度条拖动、列表滚动冲突）
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 30)
-                .onEnded { value in
-                    let dy = value.translation.height
-                    let dx = value.translation.width
-                    if dy > 70 && abs(dx) < abs(dy) * 0.6 {
-                        HapticStyle.light.trigger()
-                        dismiss()
-                    }
-                }
-        )
+        // 注：这里刻意**不加**下滑关闭手势 —— 页面本身是左右翻页的 TabView，
+        // 外层再挂 DragGesture 会和系统翻页抢手势（表现就是"滑不动/点了没反应"）。
+        // 退出统一走左上角的收起按钮。
         .onAppear {
             waveformSamples = WaveformGenerator.generate(count: 120)
         }
+    }
+
+    // MARK: - 第 0 页：播放器
+
+    private var playerPage: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 22) {
+                enhancedAlbumArtSection
+                    .padding(.top, 4)
+
+                songInfoCard
+                    .padding(.horizontal, 32)
+            }
+            .padding(.bottom, 12)
+        }
+    }
+
+    // MARK: - 第 1 页：歌词
+
+    private var lyricsPage: some View {
+        EnhancedLyricsView(isPresented: $showLyrics, isEmbedded: true)
+            .environmentObject(viewModel)
+    }
+
+    // MARK: - 页码指示点
+
+    private var pageIndicator: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<2, id: \.self) { index in
+                Capsule()
+                    .fill(index == page ? Color.white.opacity(0.9) : Color.white.opacity(0.25))
+                    .frame(width: index == page ? 18 : 6, height: 6)
+            }
+        }
+        .padding(.vertical, 6)
+        .animation(.spring(response: 0.3, dampingFraction: 0.75), value: page)
+        .accessibilityHidden(true)
     }
 
     // MARK: - 背景层
@@ -172,20 +192,20 @@ struct NowPlayingView: View {
 
             Spacer()
 
-            // 歌词切换按钮
+            // 播放 / 歌词 页切换
             Button(action: {
                 HapticStyle.medium.trigger()
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                    showLyrics.toggle()
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                    page = (page == 1) ? 0 : 1
                 }
             }) {
                 Label(
-                    showLyrics ? "关闭歌词" : "歌词",
-                    systemImage: showLyrics ? "text.bubble.fill" : "text.bubble"
+                    page == 1 ? "播放" : "歌词",
+                    systemImage: page == 1 ? "play.circle.fill" : "text.bubble"
                 )
                 .font(.system(size: 13, weight: .medium))
                 // 不要按"有没有歌词"禁用 —— 正是没歌词时才最需要进来用在线搜索
-                .foregroundColor(showLyrics ? ColorPalette.primary : .white)
+                .foregroundColor(page == 1 ? ColorPalette.primary : .white)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(.ultraThinMaterial)

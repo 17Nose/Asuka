@@ -431,7 +431,8 @@ final class PlayerViewModel: ObservableObject {
                 artist: song.artist,
                 duration: song.duration
             )
-            guard let best = results.first else { return }
+            // 用歌名 + 歌手 + 时长综合打分，避免选到翻唱版
+            guard let best = LyricsFetcher.shared.bestMatch(for: song, in: results) else { return }
 
             let download = try await LyricsFetcher.shared.download(result: best)
             let (lines, meta) = LRCParser.parse(download.lrcContent)
