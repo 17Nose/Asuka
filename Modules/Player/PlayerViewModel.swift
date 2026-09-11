@@ -159,18 +159,43 @@ final class PlayerViewModel: ObservableObject {
         do {
             let filePaths = try await fileScanner.scanFilePaths()
 
-            var newSongs: [Song] = []
+            // 已入库的「路径 → 修改时间」。文件没动过就跳过，
+            // 这样「只新增了几张专辑」时的重新扫描是秒级的。
+            var known: [String: Date] = [:]
+            if let repo = repository, let map = try? repo.getFileFingerprints() {
+                known = map
+            }
+
+            // 分批落库：一首无损曲目要读标签 + 抽封面，275 首要几分钟，
+            // 攒到最后一次性写的话中途中断就全白扫了
+            let batchSize = 25
+            var batch: [Song] = []
+            var skipped = 0
+
             for (index, path) in filePaths.enumerated() {
-                let url = URL(fileURLWithPath: path)
-                if let song = try? await MetadataExtractor.extract(from: url) {
-                    newSongs.append(song)
+                let attributes = try? FileManager.default.attributesOfItem(atPath: path)
+                let modified = attributes?[.modificationDate] as? Date
+
+                if let previous = known[path], let modified = modified, modified <= previous {
+                    skipped += 1
+                } else if let song = try? await MetadataExtractor.extract(from: URL(fileURLWithPath: path)) {
+                    batch.append(song)
                 }
+
+                if batch.count >= batchSize, let repo = repository {
+                    try repo.upsertBatch(batch)
+                    batch.removeAll()
+                }
+
                 scanProgress = Double(index + 1) / Double(filePaths.count)
             }
 
-            // 批量写入数据库
-            if let repo = repository {
-                try repo.upsertBatch(newSongs)
+            if let repo = repository, !batch.isEmpty {
+                try repo.upsertBatch(batch)
+            }
+
+            if skipped > 0 {
+                print("⏭️ 跳过 \(skipped) 个未变动的文件")
             }
 
             await loadSongs()

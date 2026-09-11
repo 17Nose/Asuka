@@ -100,6 +100,20 @@ final class SongRepository {
         }
     }
 
+    /// 返回「文件路径 → 文件修改时间」，用于扫描时跳过未改动的文件
+    func getFileFingerprints() throws -> [String: Date] {
+        try dbQueue.read { db in
+            let rows = try Row.fetchAll(db, sql: "SELECT file_path, date_modified FROM song")
+            var map: [String: Date] = [:]
+            for row in rows {
+                if let path: String = row["file_path"], let date: Date = row["date_modified"] {
+                    map[path] = date
+                }
+            }
+            return map
+        }
+    }
+
     // MARK: - 搜索
 
     /// 全文搜索
