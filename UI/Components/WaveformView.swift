@@ -30,62 +30,46 @@ struct WaveformView: View {
     }
 }
 
-/// 实时频谱动画
+/// 实时频谱（装饰性，非真实音频分析）
+///
+/// 旧实现用 `Timer` 每 0.15 秒随机重排 30 根柱子，每根都挂 spring 动画 ——
+/// 播放时持续产生大量动画事务。改用 `TimelineView` 按固定节拍驱动，
+/// 高度由确定性函数算出，开销大幅下降。
 struct LiveSpectrumView: View {
-    @State private var spectrumData: [CGFloat] = Array(repeating: 0.1, count: 30)
-    @State private var timer: Timer?
-
     let isPlaying: Bool
     var barCount: Int = 30
     var color: Color = ColorPalette.primary
 
+    private let tickInterval: TimeInterval = 0.2
+
     var body: some View {
-        GeometryReader { geo in
-            HStack(spacing: 2) {
-                ForEach(0..<barCount, id: \.self) { index in
-                    RoundedRectangle(cornerRadius: 1.5)
-                        .fill(color)
-                        .frame(
-                            width: max(2, (geo.size.width - CGFloat(barCount - 1) * 2) / CGFloat(barCount)),
-                            height: max(3, spectrumData[index] * geo.size.height)
-                        )
-                        .animation(
-                            .spring(response: 0.3, dampingFraction: 0.6),
-                            value: spectrumData[index]
-                        )
-                }
-            }
-        }
-        .onChange(of: isPlaying) { playing in
-            if playing {
-                startAnimating()
-            } else {
-                stopAnimating()
-            }
-        }
-        .onAppear {
-            if isPlaying { startAnimating() }
-        }
-        .onDisappear { stopAnimating() }
-    }
-
-    private func startAnimating() {
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { _ in
-            withAnimation {
-                spectrumData = (0..<barCount).map { _ in
-                    CGFloat.random(in: 0.1...1.0)
+        if isPlaying {
+            TimelineView(.periodic(from: .now, by: tickInterval)) { context in
+                let tick = Int(context.date.timeIntervalSinceReferenceDate / tickInterval)
+                GeometryReader { geo in
+                    let width = max(1.5, (geo.size.width - CGFloat(barCount - 1) * 2) / CGFloat(barCount))
+                    HStack(spacing: 2) {
+                        ForEach(0..<barCount, id: \.self) { index in
+                            RoundedRectangle(cornerRadius: 1.5)
+                                .fill(color)
+                                .frame(
+                                    width: width,
+                                    height: max(3, Self.height(tick: tick, index: index) * geo.size.height)
+                                )
+                        }
+                    }
                 }
             }
         }
     }
 
-    private func stopAnimating() {
-        timer?.invalidate()
-        timer = nil
-        withAnimation {
-            spectrumData = Array(repeating: 0.05, count: barCount)
-        }
+    /// 确定性的伪随机高度（用正弦叠加，避免 random 导致每帧都不同）
+    private static func height(tick: Int, index: Int) -> CGFloat {
+        let t = Double(tick), i = Double(index)
+        let value = 0.5
+            + sin(t * 0.9 + i * 0.7) * 0.28
+            + sin(t * 1.7 + i * 0.3) * 0.14
+        return CGFloat(min(max(value, 0.08), 1.0))
     }
 }
 

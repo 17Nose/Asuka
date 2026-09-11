@@ -7,12 +7,15 @@ import SwiftUI
 final class PlayerViewModel: ObservableObject {
 
     // MARK: - 播放器状态（绑定 AudioPlayer）
+    //
+    // 注意：播放进度（currentTime / duration）**不在这里** —— 它们是 10Hz 刷新的，
+    // 放进来会让所有观察者每秒重渲染几十次。见 PlaybackClock。
     @Published var playbackState: PlaybackState = .idle
     @Published var currentSong: Song?
-    @Published var currentTime: TimeInterval = 0
-    @Published var duration: TimeInterval = 0
     @Published var playMode: PlayMode = .sequential
-    @Published var volume: Float = 1.0
+
+    /// 播放进度时钟（只有真正显示进度的视图才观察它）
+    let clock = PlaybackClock.shared
 
     // MARK: - 音乐库状态
     @Published var allSongs: [Song] = []
@@ -38,6 +41,14 @@ final class PlayerViewModel: ObservableObject {
     @Published var searchQuery = ""
     @Published var searchResults: [Song] = []
 
+    // MARK: - 播放队列 / 收藏
+    /// 当前播放队列（用于「队列」面板）
+    @Published private(set) var currentQueue: [Song] = []
+    /// 收藏的歌曲 id（UserDefaults 持久化）
+    @Published private(set) var favoriteSongIds: Set<String> = []
+
+    private static let favoritesKey = "favorite_song_ids"
+
     // MARK: - 私有属性
     private let audioPlayer = AudioPlayer.shared
     private var repository: SongRepository?
@@ -47,8 +58,26 @@ final class PlayerViewModel: ObservableObject {
     // MARK: - 初始化
 
     init() {
+        if let saved = UserDefaults.standard.array(forKey: Self.favoritesKey) as? [String] {
+            favoriteSongIds = Set(saved)
+        }
         setupBindings()
         Task { await initializeDatabase() }
+    }
+
+    // MARK: - 收藏
+
+    func isFavorite(_ song: Song) -> Bool {
+        favoriteSongIds.contains(song.id)
+    }
+
+    func toggleFavorite(_ song: Song) {
+        if favoriteSongIds.contains(song.id) {
+            favoriteSongIds.remove(song.id)
+        } else {
+            favoriteSongIds.insert(song.id)
+        }
+        UserDefaults.standard.set(Array(favoriteSongIds), forKey: Self.favoritesKey)
     }
 
     private func initializeDatabase() async {
@@ -66,19 +95,32 @@ final class PlayerViewModel: ObservableObject {
     // MARK: - 绑定 AudioPlayer 状态
 
     private func setupBindings() {
-        // 使用 Timer 轮询 AudioPlayer 状态（简化 Combine 绑定方案）
+        // 轮询 AudioPlayer 状态（AVPlayer 没有细粒度的进度回调，只能定时采样）
         Timer.publish(every: 0.1, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
                 guard let self = self else { return }
-                self.playbackState = self.audioPlayer.playbackState
-                self.currentSong = self.audioPlayer.currentSong
-                self.currentTime = self.audioPlayer.currentTime
-                self.duration = self.audioPlayer.duration
-                self.playMode = self.audioPlayer.playMode
-                self.volume = self.audioPlayer.volume
+                let player = self.audioPlayer
 
-                // 更新歌词
+                // 只在真正变化时才写 —— 每次 @Published 赋值都会让所有观察者重渲染，
+                // 无条件赋值等于每秒白白触发几十次全局刷新
+                if self.playbackState != player.playbackState {
+                    self.playbackState = player.playbackState
+                }
+                if self.currentSong?.id != player.currentSong?.id {
+                    self.currentSong = player.currentSong
+                    self.clock.reset(to: player.duration)
+                }
+                if self.playMode != player.playMode {
+                    self.playMode = player.playMode
+                }
+
+                // 进度写到独立的 clock，不污染上面的全局刷新
+                self.clock.currentTime = player.currentTime
+                if self.clock.duration != player.duration {
+                    self.clock.duration = player.duration
+                }
+
                 self.updateCurrentLyric()
             }
             .store(in: &cancellables)
@@ -88,6 +130,7 @@ final class PlayerViewModel: ObservableObject {
 
     func play(song: Song, from queue: [Song]? = nil) {
         let playQueue = queue ?? allSongs
+        currentQueue = playQueue
         audioPlayer.play(song: song, queue: playQueue)
         recordPlay(songId: song.id, skipped: false)
 
@@ -338,6 +381,53 @@ final class PlayerViewModel: ObservableObject {
                 return
             }
         }
+
+        // 4. 本地没有 → 静默联网抓一次（成功会写进缓存，下次直接命中）
+        await autoFetchLyrics(for: song)
+    }
+
+    /// 本地没有歌词时自动联网抓取
+    ///
+    /// 抓取失败不打扰用户（没歌词不影响播放）；
+    /// 抓取期间用户可能已经切歌，写回前要确认还是同一首。
+    private func autoFetchLyrics(for song: Song) async {
+        guard !song.title.isEmpty else { return }
+
+        do {
+            let results = try await LyricsFetcher.shared.search(
+                title: song.title,
+                artist: song.artist,
+                duration: song.duration
+            )
+            guard let best = results.first else { return }
+
+            let download = try await LyricsFetcher.shared.download(result: best)
+            let (lines, meta) = LRCParser.parse(download.lrcContent)
+            guard !lines.isEmpty else { return }
+
+            // 抓取是异步的，用户可能已经切歌 —— 切了就不要覆盖当前歌词
+            guard currentSong?.id == song.id else { return }
+
+            var finalLines = lines
+            if let tlrc = download.tlrcContent {
+                finalLines = LRCParser.mergeTranslation(mainLines: lines, translationContent: tlrc)
+            }
+
+            lyricLines = finalLines
+            lyricMetadata = meta
+            lyricsSourceLabel = best.source.rawValue
+            updateDisplayLyrics()
+
+            saveLyricsToCache(
+                songId: song.id,
+                lrcContent: download.lrcContent,
+                tlrcContent: download.tlrcContent,
+                source: best.source.rawValue
+            )
+        } catch {
+            // 静默失败，下次播放再试
+            print("ℹ️ 未获取到歌词: \(song.title) - \(error.localizedDescription)")
+        }
     }
 
     // MARK: - 在线歌词搜索
@@ -429,7 +519,7 @@ final class PlayerViewModel: ObservableObject {
 
     private func updateCurrentLyric() {
         guard !lyricLines.isEmpty else { return }
-        let newIndex = LRCParser.findCurrentLineIndex(lines: lyricLines, currentTime: currentTime)
+        let newIndex = LRCParser.findCurrentLineIndex(lines: lyricLines, currentTime: clock.currentTime)
         if newIndex != currentLyricIndex {
             currentLyricIndex = newIndex
             updateDisplayLyrics()
@@ -441,7 +531,7 @@ final class PlayerViewModel: ObservableObject {
         displayLyrics = LRCParser.displayLines(
             lines: lyricLines,
             currentIndex: currentLyricIndex,
-            currentTime: currentTime
+            currentTime: clock.currentTime
         )
     }
 
@@ -451,31 +541,9 @@ final class PlayerViewModel: ObservableObject {
         guard let repo = repository else { return }
         try? repo.recordPlay(
             songId: songId,
-            duration: currentTime,
+            duration: clock.currentTime,
             skipped: skipped,
             source: "library"
         )
-    }
-
-    // MARK: - 进度值（0-1）
-    var progress: Double {
-        guard duration > 0 else { return 0 }
-        return currentTime / duration
-    }
-
-    /// 当前时间格式化
-    var currentTimeFormatted: String {
-        formatTime(currentTime)
-    }
-
-    /// 剩余时间格式化
-    var remainingTimeFormatted: String {
-        formatTime(duration - currentTime)
-    }
-
-    private func formatTime(_ time: TimeInterval) -> String {
-        let minutes = Int(time) / 60
-        let seconds = Int(time) % 60
-        return String(format: "%d:%02d", minutes, seconds)
     }
 }

@@ -107,40 +107,7 @@ struct MiniPlayerView: View {
     // MARK: - 流光进度条
 
     private var progressLine: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                // 背景轨道
-                Rectangle()
-                    .fill(Color.secondary.opacity(0.08))
-                    .frame(height: 2)
-
-                // 播放进度（带光晕）
-                Rectangle()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                ColorPalette.primary,
-                                ColorPalette.primary.opacity(0.7)
-                            ],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .frame(width: geo.size.width * viewModel.progress, height: 2)
-
-                // 进度头部光点（播放时发光）
-                if viewModel.playbackState == .playing {
-                    Circle()
-                        .fill(ColorPalette.primary)
-                        .frame(width: 4, height: 4)
-                        .blur(radius: 2)
-                        .offset(x: geo.size.width * viewModel.progress - 2)
-                }
-            }
-            .animation(.linear(duration: 0.1), value: viewModel.progress)
-        }
-        .frame(height: 2)
-        .padding(.horizontal, 16)
+        MiniProgressLine(isPlaying: viewModel.playbackState == .playing)
     }
 
     // MARK: - 旋转封面
@@ -212,21 +179,9 @@ struct MiniPlayerView: View {
                 }
             }
 
-            // 迷你频谱条（播放时显示）
+            // 播放指示条
             if viewModel.playbackState == .playing {
-                HStack(spacing: 1.5) {
-                    ForEach(0..<20) { i in
-                        RoundedRectangle(cornerRadius: 1)
-                            .fill(ColorPalette.primary.opacity(0.5))
-                            .frame(width: 2, height: CGFloat.random(in: 4...12))
-                            .animation(
-                                .easeInOut(duration: 0.3 + Double(i) * 0.05)
-                                    .repeatForever(autoreverses: true),
-                                value: UUID()
-                            )
-                    }
-                }
-                .frame(height: 12)
+                EqualizerBars()
             }
         }
     }
@@ -236,6 +191,83 @@ struct MiniPlayerView: View {
     private func expandPlayer() {
         HapticStyle.medium.trigger()
         showNowPlaying = true
+    }
+}
+
+// MARK: - 迷你进度条
+
+/// 单独观察 `PlaybackClock` 的子视图
+///
+/// 只有这条 2pt 的线需要跟着 10Hz 播放进度重绘，
+/// 把它从 MiniPlayerView 里拆出来，避免整条迷你播放条每秒重绘 10 次。
+private struct MiniProgressLine: View {
+    @ObservedObject var clock = PlaybackClock.shared
+    let isPlaying: Bool
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Rectangle()
+                    .fill(Color.secondary.opacity(0.08))
+                    .frame(height: 2)
+
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [ColorPalette.primary, ColorPalette.primary.opacity(0.7)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: geo.size.width * clock.progress, height: 2)
+
+                if isPlaying {
+                    Circle()
+                        .fill(ColorPalette.primary)
+                        .frame(width: 4, height: 4)
+                        .blur(radius: 2)
+                        .offset(x: geo.size.width * clock.progress - 2)
+                }
+            }
+            .animation(.linear(duration: 0.1), value: clock.progress)
+        }
+        .frame(height: 2)
+        .padding(.horizontal, 16)
+    }
+}
+
+// MARK: - 播放指示条
+
+/// 极轻量的播放指示（三根跳动的小竖条）
+///
+/// ⚠️ 旧实现用的是：
+/// ```
+/// .animation(.easeInOut(...).repeatForever(), value: UUID())
+/// ```
+/// `UUID()` 每次渲染都会生成新值，SwiftUI 便认为「动画目标每帧都在变」，
+/// 于是每帧重启一次 `repeatForever` 动画 —— 这是播放时严重掉帧的主要元凶之一。
+/// 改成 `TimelineView` 按固定节拍驱动，只在需要时重绘这一小块。
+struct EqualizerBars: View {
+    private let patterns: [[CGFloat]] = [
+        [6, 11, 8],
+        [11, 7, 12],
+        [8, 12, 6],
+        [12, 8, 10],
+    ]
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 0.45)) { context in
+            let index = Int(context.date.timeIntervalSinceReferenceDate / 0.45) % patterns.count
+            HStack(spacing: 2) {
+                ForEach(0..<3, id: \.self) { i in
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(ColorPalette.primary.opacity(0.7))
+                        .frame(width: 2.5, height: patterns[index][i])
+                }
+            }
+            .frame(height: 12, alignment: .center)
+            .animation(.easeInOut(duration: 0.4), value: index)
+        }
     }
 }
 

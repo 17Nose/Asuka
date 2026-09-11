@@ -4,11 +4,11 @@ import SwiftUI
 struct NowPlayingView: View {
     @EnvironmentObject var viewModel: PlayerViewModel
     @Environment(\.dismiss) private var dismiss
+
     @State private var showLyrics = false
-    @State private var showShareSheet = false
+    @State private var showQueue = false
     @State private var waveformSamples: [CGFloat] = []
     @State private var coverScale: CGFloat = 1.0
-    @State private var bgRotation: Double = 0
 
     // MARK: - Body
 
@@ -36,13 +36,7 @@ struct NowPlayingView: View {
                             .padding(.horizontal, 32)
 
                         // 自定义进度条（带波形）
-                        MusicProgressSlider(
-                            progress: Binding(
-                                get: { CGFloat(viewModel.progress) },
-                                set: { _ in }
-                            ),
-                            duration: viewModel.duration,
-                            currentTime: viewModel.currentTime,
+                        ProgressSection(
                             waveformSamples: waveformSamples,
                             onSeek: { time in viewModel.seek(to: time) }
                         )
@@ -79,13 +73,23 @@ struct NowPlayingView: View {
         }
         .animation(.easeInOut(duration: 0.35), value: showLyrics)
         .animation(.easeInOut(duration: 0.4), value: viewModel.playbackState)
+        // 强制深色：这是沉浸式深色界面，且能让 .ultraThinMaterial 渲染成深色，
+        // 否则浅色模式下白色图标压在浅色毛玻璃上会看不见（返回键曾因此"消失"）
+        .environment(\.colorScheme, .dark)
+        // 下滑关闭（纵向为主的手势才触发，避免和进度条拖动、列表滚动冲突）
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 30)
+                .onEnded { value in
+                    let dy = value.translation.height
+                    let dx = value.translation.width
+                    if dy > 70 && abs(dx) < abs(dy) * 0.6 {
+                        HapticStyle.light.trigger()
+                        dismiss()
+                    }
+                }
+        )
         .onAppear {
-            // 生成模拟波形数据
             waveformSamples = WaveformGenerator.generate(count: 120)
-            // 慢速背景旋转
-            withAnimation(.linear(duration: 60).repeatForever(autoreverses: false)) {
-                bgRotation = 360
-            }
         }
     }
 
@@ -157,13 +161,15 @@ struct NowPlayingView: View {
                 dismiss()
             }) {
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.8))
-                    .frame(width: 36, height: 36)
+                    .font(.system(size: 19, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(width: 44, height: 44)   // 44pt 是 iOS 最小可点区域
                     .background(.ultraThinMaterial)
                     .clipShape(Circle())
+                    .overlay(Circle().stroke(.white.opacity(0.15), lineWidth: 1))
             }
             .buttonStyle(BouncyButtonStyle(scale: 0.9))
+            .accessibilityLabel("收起播放页")
 
             Spacer()
 
@@ -179,17 +185,16 @@ struct NowPlayingView: View {
                     systemImage: showLyrics ? "text.bubble.fill" : "text.bubble"
                 )
                 .font(.system(size: 13, weight: .medium))
-                .foregroundColor(
-                    viewModel.lyricLines.isEmpty
-                        ? .white.opacity(0.3)
-                        : (showLyrics ? ColorPalette.primary : .white.opacity(0.8))
-                )
+                // 不要按"有没有歌词"禁用 —— 正是没歌词时才最需要进来用在线搜索
+                .foregroundColor(showLyrics ? ColorPalette.primary : .white)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(.ultraThinMaterial)
                 .clipShape(Capsule())
+                .overlay(
+                    Capsule().stroke(.white.opacity(0.15), lineWidth: 1)
+                )
             }
-            .disabled(viewModel.lyricLines.isEmpty)
 
             Spacer()
 
@@ -446,43 +451,113 @@ struct NowPlayingView: View {
 
     // MARK: - 底部操作卡片
 
+    /// 底部四个操作按钮
+    ///
+    /// 布局说明：每个按钮都 `.frame(maxWidth: .infinity)` 四等分，
+    /// 这样在窄屏（如 iPhone SE / mini）上也不会溢出到屏幕外。
     private var actionCard: some View {
-        ImmersiveCard(cornerRadius: 16) {
+        let song = viewModel.currentSong
+        let isFavorite = song.map { viewModel.isFavorite($0) } ?? false
+
+        return ImmersiveCard(cornerRadius: 16) {
             HStack(spacing: 0) {
-                Spacer()
-
-                ActionButton(icon: "heart", label: "喜欢") {
-                    HapticStyle.light.trigger()
+                ActionButton(
+                    icon: isFavorite ? "heart.fill" : "heart",
+                    label: "喜欢",
+                    tint: isFavorite ? ColorPalette.accent : nil
+                ) {
+                    if let song = song { viewModel.toggleFavorite(song) }
                 }
-
-                Spacer()
 
                 ActionButton(icon: "list.bullet", label: "队列") {
-                    HapticStyle.light.trigger()
+                    showQueue = true
                 }
 
-                Spacer()
-
-                ActionButton(icon: "text.line.first.and.arrowtriangle.forward", label: "分享") {
-                    HapticStyle.light.trigger()
-                    showShareSheet = true
+                ShareLink(item: shareText) {
+                    actionLabel(icon: "square.and.arrow.up", label: "分享")
                 }
 
-                Spacer()
-
-                ActionButton(icon: "ellipsis.circle", label: "更多") {
-                    HapticStyle.light.trigger()
+                Menu {
+                    if let song = song {
+                        Section("歌曲信息") {
+                            Text("\(song.title) · \(song.displayArtist)")
+                            Text("\(song.format.uppercased()) · \(song.fileSizeFormatted)")
+                        }
+                    }
+                    Section("播放模式") {
+                        ForEach(PlayMode.allCases, id: \.rawValue) { mode in
+                            Button {
+                                while viewModel.playMode != mode { viewModel.togglePlayMode() }
+                            } label: {
+                                Label(mode.rawValue,
+                                      systemImage: viewModel.playMode == mode ? "checkmark" : mode.iconName)
+                            }
+                        }
+                    }
+                } label: {
+                    actionLabel(icon: "ellipsis.circle", label: "更多")
                 }
-
-                Spacer()
             }
-            .padding(.vertical, 6)
+            .padding(.vertical, 10)
+            .padding(.horizontal, 6)
         }
+        .sheet(isPresented: $showQueue) {
+            QueueSheet()
+                .environmentObject(viewModel)
+        }
+    }
+
+    /// 分享文案
+    private var shareText: String {
+        guard let song = viewModel.currentSong else { return "Rin" }
+        return "\(song.title) - \(song.displayArtist)"
+    }
+
+    /// 按钮外观（ShareLink / Menu 复用，保证四个按钮视觉一致）
+    private func actionLabel(icon: String, label: String) -> some View {
+        VStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 19))
+                .foregroundColor(.white.opacity(0.85))
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundColor(.white.opacity(0.6))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
     }
 
     // MARK: - 增强版歌词覆盖层
 
     // 歌词覆盖层已替换为 EnhancedLyricsView 独立组件
+}
+
+// MARK: - 进度区
+
+/// 单独观察 `PlaybackClock` 的子视图
+///
+/// 只有这一小块需要跟着 10Hz 的播放进度重绘；
+/// 若把 clock 挂在 NowPlayingView 上，整页（含滚动内容、频谱、按钮）
+/// 都会每秒重绘 10 次，白白掉帧。
+private struct ProgressSection: View {
+    @ObservedObject var clock = PlaybackClock.shared
+    let waveformSamples: [CGFloat]
+    let onSeek: (TimeInterval) -> Void
+
+    var body: some View {
+        MusicProgressSlider(
+            progress: Binding(
+                get: { CGFloat(clock.progress) },
+                set: { _ in }
+            ),
+            duration: clock.duration,
+            currentTime: clock.currentTime,
+            waveformSamples: waveformSamples,
+            onSeek: onSeek
+        )
+    }
 }
 
 // MARK: - 控制按钮子组件
@@ -519,31 +594,91 @@ struct ControlButton: View {
 struct ActionButton: View {
     let icon: String
     let label: String
+    var tint: Color? = nil
     let action: () -> Void
-
-    @State private var isPressed = false
 
     var body: some View {
         Button(action: {
-            withAnimation(.spring(response: 0.2, dampingFraction: 0.5)) {
-                isPressed = true
-            }
+            HapticStyle.light.trigger()
             action()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                withAnimation { isPressed = false }
-            }
         }) {
             VStack(spacing: 6) {
                 Image(systemName: icon)
-                    .font(.system(size: 18))
-                    .foregroundColor(.white.opacity(0.7))
+                    .font(.system(size: 19))
+                    .foregroundColor(tint ?? .white.opacity(0.85))
                 Text(label)
                     .font(.system(size: 11))
-                    .foregroundColor(.white.opacity(0.5))
+                    .foregroundColor(.white.opacity(0.6))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            // 四等分，窄屏也不会溢出
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(BouncyButtonStyle(scale: 0.88))
+    }
+}
+
+// MARK: - 播放队列面板
+
+struct QueueSheet: View {
+    @EnvironmentObject var viewModel: PlayerViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if viewModel.currentQueue.isEmpty {
+                    VStack(spacing: 14) {
+                        Image(systemName: "list.bullet")
+                            .font(.system(size: 42))
+                            .foregroundColor(.secondary.opacity(0.4))
+                        Text("播放队列是空的")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    List {
+                        ForEach(Array(viewModel.currentQueue.enumerated()), id: \.element.id) { index, song in
+                            HStack(spacing: 12) {
+                                if viewModel.currentSong?.id == song.id {
+                                    NowPlayingIndicator()
+                                }
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(song.title)
+                                        .font(.system(size: 15, weight: viewModel.currentSong?.id == song.id ? .semibold : .regular))
+                                        .foregroundColor(viewModel.currentSong?.id == song.id ? ColorPalette.primary : .primary)
+                                        .lineLimit(1)
+                                    Text(song.displayArtist)
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                                Text(song.durationFormatted)
+                                    .font(.system(size: 12, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                            }
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                HapticStyle.light.trigger()
+                                viewModel.play(song: song, from: viewModel.currentQueue)
+                            }
+                        }
+                    }
+                    .listStyle(.plain)
+                }
+            }
+            .navigationTitle("播放队列（\(viewModel.currentQueue.count)）")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { dismiss() }
+                }
             }
         }
-        .scaleEffect(isPressed ? 0.85 : 1.0)
-        .buttonStyle(.plain)
     }
 }
 

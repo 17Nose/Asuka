@@ -68,34 +68,90 @@ final class LyricsFetcher {
     }
 
     /// 下载歌词内容
+    /// 下载歌词
+    ///
+    /// ⚠️ 三个音乐源返回的格式**完全不同**，必须分开解析：
+    ///   - 网易云：JSON `{ "lrc": {"lyric": "..."}, "tlyric": {"lyric": "..."} }`
+    ///   - QQ   ：JSON `{ "lyric": "..." }`（请求带 `nobase64=1`）
+    ///   - 酷狗 ：Base64 编码的歌词文本
+    ///
+    /// 旧实现把返回体一律当成纯 LRC 文本存库，结果存进去的是一整段 JSON，
+    /// `LRCParser` 找不到任何 `[mm:ss]` 行 —— 这就是「所有歌都没歌词」的根因。
     func download(result: LyricsSearchResult) async throws -> LyricsDownloadResult {
-        guard let lrcURL = result.lrcURL, let url = URL(string: lrcURL) else {
+        switch result.source {
+        case .netease: return try await downloadNetease(result)
+        case .qq:      return try await downloadQQ(result)
+        case .kugou:   return try await downloadKuGou(result)
+        case .local:   throw LyricsError.noLyricsFound
+        }
+    }
+
+    // MARK: - 各源下载实现
+
+    private func fetch(_ urlString: String?, referer: String) async throws -> Data {
+        guard let urlString = urlString, let url = URL(string: urlString) else {
             throw LyricsError.noLyricsFound
         }
+        var request = URLRequest(url: url)
+        // 这几个接口都校验来源，缺 Referer 会被拒
+        request.setValue(referer, forHTTPHeaderField: "Referer")
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)", forHTTPHeaderField: "User-Agent")
+        let (data, _) = try await session.data(for: request)
+        return data
+    }
 
-        var lrcContent = ""
-        var tlrcContent: String? = nil
+    private func downloadNetease(_ result: LyricsSearchResult) async throws -> LyricsDownloadResult {
+        let data = try await fetch(result.lrcURL, referer: "https://music.163.com")
 
-        // 下载主歌词
-        let (lrcData, _) = try await session.data(from: url)
-        lrcContent = String(data: lrcData, encoding: .utf8) ?? ""
-
-        // 下载翻译歌词
-        if let tlyricURL = result.tlyricURL, let tURL = URL(string: tlyricURL) {
-            if let (tData, _) = try? await session.data(from: tURL) {
-                tlrcContent = String(data: tData, encoding: .utf8)
-            }
+        struct Resp: Decodable {
+            struct Lrc: Decodable { let lyric: String? }
+            let lrc: Lrc?
+            let tlyric: Lrc?
+            let klyric: Lrc?
         }
+        let resp = try JSONDecoder().decode(Resp.self, from: data)
 
-        guard !lrcContent.isEmpty else {
-            throw LyricsError.noLyricsFound
-        }
+        // 普通歌词为空时退回逐字歌词（KRC 同样带时间轴）
+        let candidates = [resp.lrc?.lyric, resp.klyric?.lyric].compactMap { $0 }
+        let lyric = candidates.first {
+            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        } ?? ""
 
+        guard !lyric.isEmpty else { throw LyricsError.noLyricsFound }
+
+        let translation = resp.tlyric?.lyric
         return LyricsDownloadResult(
-            lrcContent: lrcContent,
-            tlrcContent: tlrcContent,
-            source: result.source
+            lrcContent: lyric,
+            tlrcContent: (translation?.isEmpty == false) ? translation : nil,
+            source: .netease
         )
+    }
+
+    private func downloadQQ(_ result: LyricsSearchResult) async throws -> LyricsDownloadResult {
+        let data = try await fetch(result.lrcURL, referer: "https://y.qq.com")
+
+        struct Resp: Decodable { let lyric: String? }
+        let resp = try JSONDecoder().decode(Resp.self, from: data)
+
+        guard let lyric = resp.lyric, !lyric.isEmpty else { throw LyricsError.noLyricsFound }
+        return LyricsDownloadResult(lrcContent: lyric, tlrcContent: nil, source: .qq)
+    }
+
+    private func downloadKuGou(_ result: LyricsSearchResult) async throws -> LyricsDownloadResult {
+        let data = try await fetch(result.lrcURL, referer: "https://www.kugou.com")
+
+        // 酷狗一般返回 Base64
+        if let base64 = String(data: data, encoding: .utf8),
+           let decoded = Data(base64Encoded: base64.trimmingCharacters(in: .whitespacesAndNewlines)),
+           let text = String(data: decoded, encoding: .utf8),
+           !text.isEmpty {
+            return LyricsDownloadResult(lrcContent: text, tlrcContent: nil, source: .kugou)
+        }
+        // 偶尔直接给明文
+        if let text = String(data: data, encoding: .utf8), text.contains("[") {
+            return LyricsDownloadResult(lrcContent: text, tlrcContent: nil, source: .kugou)
+        }
+        throw LyricsError.noLyricsFound
     }
 
     // MARK: - 网易云音乐搜索
@@ -107,7 +163,10 @@ final class LyricsFetcher {
 
         guard let url = URL(string: searchURL) else { return [] }
 
-        let (data, response) = try await session.data(from: url)
+        var request = URLRequest(url: url)
+        request.setValue("https://music.163.com", forHTTPHeaderField: "Referer")
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)", forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else { return [] }
@@ -196,7 +255,10 @@ final class LyricsFetcher {
 
         guard let url = URL(string: searchURL) else { return [] }
 
-        let (data, response) = try await session.data(from: url)
+        var request = URLRequest(url: url)
+        request.setValue("https://y.qq.com", forHTTPHeaderField: "Referer")
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)", forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else { return [] }
@@ -206,6 +268,8 @@ final class LyricsFetcher {
                 struct Song: Codable {
                     struct SongInfo: Codable {
                         let songid: Int
+                        /// 歌词接口必须用 songmid（字符串），不能用 songid（数字）
+                        let songmid: String?
                         let songname: String
                         let singer: [SingerInfo]?
                         let albumname: String?
@@ -225,8 +289,10 @@ final class LyricsFetcher {
         guard let songs = qqResp.data?.song?.song else { return [] }
 
         return songs.compactMap { song in
+            // 没有 songmid 就无法取歌词，直接跳过
+            guard let mid = song.songmid, !mid.isEmpty else { return nil }
             let songDuration = TimeInterval(song.interval ?? 0)
-            let lrcURL = "https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid=\(song.songid)&format=json&nobase64=1"
+            let lrcURL = "https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid=\(mid)&format=json&nobase64=1"
             return LyricsSearchResult(
                 id: "qq_\(song.songid)",
                 title: song.songname,

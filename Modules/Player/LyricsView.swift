@@ -3,6 +3,8 @@ import SwiftUI
 /// 增强版歌词视图（拖拽定位 + 逐字高亮 + 翻译行 + 在线搜索）
 struct EnhancedLyricsView: View {
     @EnvironmentObject var viewModel: PlayerViewModel
+    /// 逐字高亮需要跟着播放进度走，所以必须观察时钟
+    @ObservedObject private var clock = PlaybackClock.shared
     @Binding var isPresented: Bool
 
     @State private var dragOffset: CGFloat = 0
@@ -276,7 +278,7 @@ struct EnhancedLyricsView: View {
     /// 逐字高亮文本
     @ViewBuilder
     private func wordByWordText(line: DisplayLyricLine) -> some View {
-        let currentTime = viewModel.currentTime
+        let currentTime = clock.currentTime
         // 找到当前行的开始时间
         let lineStartTime: TimeInterval = {
             if let idx = viewModel.currentLyricIndex,

@@ -149,31 +149,30 @@ struct SongRowView: View {
 
 // MARK: - 播放中指示器（小波形动画）
 
+/// 「正在播放」的小波形指示器
+///
+/// ⚠️ 旧实现用 `Timer.scheduledTimer` 且**从不 invalidate**：
+/// 视图消失后定时器仍在跑，随着列表滚动会不断累积，白白消耗 CPU。
+/// 改用 `TimelineView`，视图移除时自动停止。
 struct NowPlayingIndicator: View {
-    @State private var heights: [CGFloat] = [0.3, 0.6, 0.9, 0.6, 0.3]
+    private let patterns: [[CGFloat]] = [
+        [0.5, 0.9, 0.4, 1.0, 0.6],
+        [0.9, 0.4, 1.0, 0.5, 0.8],
+        [0.4, 1.0, 0.6, 0.8, 0.5],
+        [1.0, 0.6, 0.8, 0.4, 0.9],
+    ]
 
     var body: some View {
-        HStack(spacing: 2) {
-            ForEach(0..<5) { i in
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(ColorPalette.primary)
-                    .frame(width: 2.5, height: 12 * heights[i])
-                    .animation(
-                        Animation.easeInOut(duration: 0.4 + Double(i) * 0.1)
-                            .repeatForever(autoreverses: true),
-                        value: heights[i]
-                    )
+        TimelineView(.periodic(from: .now, by: 0.35)) { context in
+            let index = Int(context.date.timeIntervalSinceReferenceDate / 0.35) % patterns.count
+            HStack(spacing: 2) {
+                ForEach(0..<5, id: \.self) { i in
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(ColorPalette.primary)
+                        .frame(width: 2.5, height: 12 * patterns[index][i])
+                }
             }
-        }
-        .onAppear {
-            heights = [0.8, 0.3, 1.0, 0.5, 0.7]
-            animateWaves()
-        }
-    }
-
-    private func animateWaves() {
-        Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { _ in
-            heights = (0..<5).map { _ in CGFloat.random(in: 0.3...1.0) }
+            .animation(.easeInOut(duration: 0.3), value: index)
         }
     }
 }
