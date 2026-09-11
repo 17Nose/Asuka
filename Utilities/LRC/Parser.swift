@@ -358,12 +358,18 @@ struct LRCParser {
 
     // MARK: - 生成显示用数据
 
+    /// `displayLines` 在首尾各填充的空行数量
+    ///
+    /// 视图要把 displayLyrics 的下标换算回真实歌词下标（`下标 - displayPaddingLines`），
+    /// 提成常量避免两边各写一个 5 改漏。
+    static let displayPaddingLines = 5
+
     /// 获取用于 UI 显示的歌词行列表（带空行填充使当前行居中）
     static func displayLines(
         lines: [LyricLine],
         currentIndex: Int?,
         currentTime: TimeInterval = 0,
-        paddingLines: Int = 5
+        paddingLines: Int = LRCParser.displayPaddingLines
     ) -> [DisplayLyricLine] {
         guard !lines.isEmpty else { return [] }
 
@@ -400,7 +406,10 @@ struct LRCParser {
     }
 
     /// 当前歌词行在 `displayLines` 结果里的位置（用于滚动定位）
-    static func displayIndex(ofLyricIndex index: Int, paddingLines: Int = 5) -> Int {
+    static func displayIndex(
+        ofLyricIndex index: Int,
+        paddingLines: Int = LRCParser.displayPaddingLines
+    ) -> Int {
         index + paddingLines
     }
 

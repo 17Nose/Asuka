@@ -39,12 +39,9 @@ struct NowPlayingView: View {
 
                 pageIndicator
 
-                // 实时频谱条
-                if viewModel.playbackState == .playing {
-                    LiveSpectrumView(isPlaying: true)
-                        .frame(height: 26)
-                        .padding(.horizontal, 40)
-                }
+                // 注：这里原本有一条「实时频谱」动画。它不是真实音频分析，
+                // 而是每 0.2 秒重排 26 根柱子，持续占用 GPU 且没有任何信息量，
+                // 播放页的卡顿主要来自它 —— 已移除。
 
                 // 以下为两页共用：进度、控制、操作
                 ProgressSection(

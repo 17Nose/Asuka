@@ -154,9 +154,14 @@ struct LibraryView: View {
             } else {
                 tabContent
             }
-
-            // 给底部的迷你播放条 + 悬浮标签栏留出空间
-            Spacer(minLength: 130)
+        }
+        // 关键：内容**铺满整个屏幕高度**，只在可滚动区域底部加一段内边距。
+        //
+        // 这样列表会从悬浮标签栏底下穿过 —— 透过毛玻璃能看到滚过去的封面和文字，
+        // 才是 Apple Music 那种「玻璃浮在内容上」的感觉。
+        // 之前是用 Spacer 在布局里硬留一行，玻璃下面什么都没有，看起来就是块实心条。
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear.frame(height: 116)
         }
     }
 
