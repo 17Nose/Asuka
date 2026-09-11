@@ -50,8 +50,8 @@ enum LibraryGrouping {
                 return AlbumItem(
                     name: first.displayAlbum,
                     artist: first.groupingArtist,
-                    // 优先取组内有封面的那首
-                    coverPath: group.first(where: { $0.coverArtPath != nil })?.coverArtPath,
+                    // 优先取组内有封面的那首（用解析后的绝对路径）
+                    coverPath: group.first(where: { $0.coverArtPath != nil })?.resolvedCoverArtPath,
                     year: group.map(\.year).first(where: { $0 > 0 }) ?? 0,
                     songs: sortTracks(group)
                 )

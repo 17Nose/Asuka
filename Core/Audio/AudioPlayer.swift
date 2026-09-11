@@ -98,7 +98,7 @@ final class AudioPlayer: NSObject, ObservableObject {
         currentSong = song
         playbackState = .loading
 
-        let url = URL(fileURLWithPath: song.filePath)
+        let url = URL(fileURLWithPath: song.resolvedFilePath)
         let playerItem = AVPlayerItem(url: url)
 
         // 监听状态
@@ -347,8 +347,7 @@ final class AudioPlayer: NSObject, ObservableObject {
         ]
 
         // 加载封面图
-        if let coverPath = song.coverArtPath,
-           let coverImage = UIImage(contentsOfFile: coverPath) {
+        if let coverImage = song.coverImage {
             let artwork = MPMediaItemArtwork(boundsSize: coverImage.size) { _ in coverImage }
             info[MPMediaItemPropertyArtwork] = artwork
         }

@@ -114,8 +114,7 @@ struct MiniPlayerView: View {
 
     private func rotatingCover(for song: Song) -> some View {
         Group {
-            if let path = song.coverArtPath,
-               let image = UIImage(contentsOfFile: path) {
+            if let image = song.coverImage {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()

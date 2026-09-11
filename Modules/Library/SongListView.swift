@@ -125,8 +125,7 @@ struct SongRowView: View {
     /// 封面缩略图（无封面时用渐变占位）
     private var albumArtThumbnail: some View {
         Group {
-            if let path = song.coverArtPath,
-               let image = UIImage(contentsOfFile: path) {
+            if let image = song.coverImage {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()

@@ -15,7 +15,7 @@ struct AlbumDetailView: View {
     }
 
     private var coverPath: String? {
-        songs.first(where: { $0.coverArtPath != nil })?.coverArtPath
+        songs.first(where: { $0.coverArtPath != nil })?.resolvedCoverArtPath
     }
 
     private var year: Int {

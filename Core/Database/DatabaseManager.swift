@@ -133,8 +133,9 @@ final class DatabaseManager: @unchecked Sendable {
         }
     }
 
-    // MARK: - 清空数据库（调试用）
+    // MARK: - 清空数据库
 
+    /// 清空全部音乐库数据（路径失效时的重建流程会用到）
     func clearAll() throws {
         guard let dbQueue = dbQueue else { return }
         try dbQueue.write { db in
@@ -143,6 +144,9 @@ final class DatabaseManager: @unchecked Sendable {
             try db.execute(sql: "DELETE FROM lyrics_cache")
             try db.execute(sql: "DELETE FROM song")
             try db.execute(sql: "DELETE FROM playlist")
+            // song_fts 是 external-content 表，删了 song 之后必须重建索引，
+            // 否则残留的索引行会指向已删除的 rowid
+            try db.execute(sql: "INSERT INTO song_fts(song_fts) VALUES('rebuild')")
         }
     }
 }

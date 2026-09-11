@@ -106,10 +106,17 @@ final class MetadataExtractor {
             trackNumber = Song.trackNumberFromFileName(url.lastPathComponent)
         }
 
-        // 保存封面图片到缓存
+        // 关键：存「与安装无关」的路径。
+        // iOS 沙盒路径含随机 UUID，每次重装都会变；存绝对路径的话，
+        // 重装后所有记录都会失效 —— 歌单还在，但一首也播不了、封面全丢。
+        let storedPath = SongPath.normalize(url.path)
+        let songId = Song.stableId(for: storedPath)
+
+        // 封面文件用稳定的 songId 命名（不能用 url.path.hashValue：
+        // Swift 的 hashValue 每次启动都会重新加盐，重扫会留下一堆孤儿文件）
         var coverArtPath: String? = nil
         if let data = coverArtData {
-            coverArtPath = saveCoverArt(songId: url.path.hashValue.description, data: data)
+            coverArtPath = saveCoverArt(songId: songId, data: data)
         }
 
         let format = url.pathExtension.lowercased()
@@ -117,8 +124,8 @@ final class MetadataExtractor {
         let dateModified = (fileAttributes?[.modificationDate] as? Date) ?? Date()
 
         return Song(
-            id: stableHash(from: url.path),
-            filePath: url.path,
+            id: songId,
+            filePath: storedPath,
             title: title,
             artist: artist,
             album: album,
@@ -150,24 +157,15 @@ final class MetadataExtractor {
 
     // MARK: - 私有辅助
 
-    /// 生成稳定的哈希 ID（相同路径始终相同 ID）
-    private static func stableHash(from string: String) -> String {
-        var hasher = Hasher()
-        hasher.combine(string)
-        let hash = hasher.finalize()
-        return String(format: "%08x", hash)
-    }
-
-    /// 保存封面图片到缓存目录
+    /// 保存封面图片到缓存目录，返回**安装无关**的路径
     private static func saveCoverArt(songId: String, data: Data) -> String? {
-        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        let coverDir = cacheDir.appendingPathComponent("CoverArt")
+        let coverDir = SongPath.cachesDirectory.appendingPathComponent("CoverArt")
         try? FileManager.default.createDirectory(at: coverDir, withIntermediateDirectories: true)
 
         let fileURL = coverDir.appendingPathComponent("\(songId).jpg")
         do {
             try data.write(to: fileURL)
-            return fileURL.path
+            return SongPath.normalize(fileURL.path)
         } catch {
             print("❌ 保存封面失败: \(error.localizedDescription)")
             return nil

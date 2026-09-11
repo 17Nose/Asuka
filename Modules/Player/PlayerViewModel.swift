@@ -87,8 +87,35 @@ final class PlayerViewModel: ObservableObject {
             repository = SongRepository(dbQueue: dbQueue)
             SmartPlaylistEngine.shared.setRepository(repository!)
             await loadSongs()
+            await repairLibraryIfPathsAreStale()
         } catch {
             errorMessage = "数据库初始化失败: \(error.localizedDescription)"
+        }
+    }
+
+    /// 自愈：修复因沙盒路径变化而失效的音乐库
+    ///
+    /// iOS 沙盒路径含随机 UUID，**每次重装都会变**。旧版本把绝对路径存进了数据库，
+    /// 重装后就会「歌单还在、封面也在、但一首也播不了」。
+    ///
+    /// 新版本存的是与安装无关的相对路径（见 `SongPath`），不会再有这个问题；
+    /// 这里只负责把**历史遗留**的坏库重建一次。
+    private func repairLibraryIfPathsAreStale() async {
+        guard !allSongs.isEmpty else { return }
+
+        let missingCount = allSongs.filter { !$0.fileExists }.count
+        guard missingCount > allSongs.count / 2 else { return }
+
+        print("⚠️ \(missingCount)/\(allSongs.count) 首歌曲路径失效（沙盒 UUID 变化），正在重建音乐库…")
+
+        do {
+            try DatabaseManager.shared.clearAll()
+            allSongs = []
+            recentSongs = []
+            // 重新扫描：会按「安装无关路径」写入，之后重装不再受影响
+            await scanFiles()
+        } catch {
+            errorMessage = "音乐库重建失败，请手动点扫描按钮重试"
         }
     }
 
@@ -219,7 +246,11 @@ final class PlayerViewModel: ObservableObject {
                 let attributes = try? FileManager.default.attributesOfItem(atPath: path)
                 let modified = attributes?[.modificationDate] as? Date
 
-                if let previous = known[path], let modified = modified, modified <= previous {
+                // 数据库里存的是「安装无关」路径，比较前要先规范化，
+                // 否则永远匹配不上，每次扫描都会全量重做
+                let storedPath = SongPath.normalize(path)
+
+                if let previous = known[storedPath], let modified = modified, modified <= previous {
                     skipped += 1
                 } else if let song = try? await MetadataExtractor.extract(from: URL(fileURLWithPath: path)) {
                     batch.append(song)
@@ -347,8 +378,9 @@ final class PlayerViewModel: ObservableObject {
             return
         }
 
-        // 2. 查找本地 .lrc 文件
-        let lrcPath = (song.filePath as NSString).deletingPathExtension + ".lrc"
+        // 2. 查找本地 .lrc 文件（用解析后的绝对路径，数据库里存的是相对路径）
+        let resolvedPath = song.resolvedFilePath
+        let lrcPath = (resolvedPath as NSString).deletingPathExtension + ".lrc"
         if FileManager.default.fileExists(atPath: lrcPath),
            let (lines, meta) = LRCParser.parse(filePath: lrcPath) {
             lyricLines = lines
@@ -361,8 +393,8 @@ final class PlayerViewModel: ObservableObject {
         }
 
         // 3. 查找同目录下的 .lrc 文件
-        let dir = (song.filePath as NSString).deletingLastPathComponent
-        let baseName = ((song.filePath as NSString).lastPathComponent as NSString).deletingPathExtension
+        let dir = (resolvedPath as NSString).deletingLastPathComponent
+        let baseName = ((resolvedPath as NSString).lastPathComponent as NSString).deletingPathExtension
         let patterns = [
             "\(baseName).lrc",
             "\(song.artist) - \(song.title).lrc",

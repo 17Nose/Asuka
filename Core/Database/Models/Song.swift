@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// 歌曲数据模型
 struct Song: Identifiable, Codable, Equatable {
@@ -101,6 +102,41 @@ struct Song: Identifiable, Codable, Equatable {
         self.dateAdded = dateAdded
         self.dateModified = dateModified
     }
+}
+
+// MARK: - 稳定 ID
+
+extension Song {
+    /// 由「安装无关路径」算出的稳定 ID
+    ///
+    /// ⚠️ 不能用 Swift 的 `Hasher` / `hashValue`：它们**每次进程启动都会重新加盐**，
+    /// 同一个文件在不同次启动会算出不同的值。用它当主键会导致每次扫描都新增一批
+    /// 重复记录（`ON CONFLICT(id)` 永远匹配不上）。这里用确定性的 FNV-1a。
+    static func stableId(for storedPath: String) -> String {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325   // FNV-1a 64 位偏移基准
+        for byte in storedPath.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 0x0000_0100_0000_01b3    // FNV 质数
+        }
+        return String(format: "%016llx", hash)
+    }
+
+    /// 解析后的绝对路径（当前安装下）
+    var resolvedFilePath: String { SongPath.resolve(filePath) }
+
+    /// 解析后的封面绝对路径
+    var resolvedCoverArtPath: String? {
+        coverArtPath.map { SongPath.resolve($0) }
+    }
+
+    /// 封面图片（统一入口，避免各视图各自拼路径）
+    var coverImage: UIImage? {
+        guard let path = resolvedCoverArtPath else { return nil }
+        return UIImage(contentsOfFile: path)
+    }
+
+    /// 音频文件是否仍然存在（用于检测路径失效）
+    var fileExists: Bool { SongPath.exists(filePath) }
 }
 
 // MARK: - 从文件名推断元数据

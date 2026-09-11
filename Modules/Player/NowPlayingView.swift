@@ -97,8 +97,7 @@ struct NowPlayingView: View {
 
     @ViewBuilder
     private var backgroundLayer: some View {
-        if let path = viewModel.currentSong?.coverArtPath,
-           let image = UIImage(contentsOfFile: path) {
+        if let image = viewModel.currentSong?.coverImage {
             ZStack {
                 // 放大的模糊封面
                 Image(uiImage: image)
@@ -250,7 +249,7 @@ struct NowPlayingView: View {
     private var enhancedAlbumArtSection: some View {
         VStack(spacing: 0) {
             VinylRecordView(
-                coverImagePath: viewModel.currentSong?.coverArtPath,
+                coverImagePath: viewModel.currentSong?.resolvedCoverArtPath,
                 isPlaying: viewModel.playbackState == .playing,
                 size: 280
             )

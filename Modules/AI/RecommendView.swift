@@ -234,8 +234,7 @@ struct RecommendView: View {
         GlassmorphicCard(cornerRadius: 16, padding: 16) {
             HStack(spacing: 14) {
                 Group {
-                    if let path = song.coverArtPath,
-                       let image = UIImage(contentsOfFile: path) {
+                    if let image = song.coverImage {
                         Image(uiImage: image)
                             .resizable()
                             .scaledToFill()
