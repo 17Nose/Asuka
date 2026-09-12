@@ -1,6 +1,13 @@
 import SwiftUI
 
-/// 全屏播放器界面（增强版：自定义滑块 + 频谱 + 弹性动效）
+/// 全屏播放器界面
+///
+/// 版式对齐咪咕音乐：
+/// - 背景从封面提取主色调铺成渐变（不是模糊封面）
+/// - 圆角方形大封面占上半屏
+/// - 歌曲信息左对齐 + 标签胶囊
+/// - 操作 / 进度 / 控制全部收在屏幕下段，纯白图标无底色
+/// - 左右滑动在「播放 / 歌词」两页间切换
 struct NowPlayingView: View {
     @EnvironmentObject var viewModel: PlayerViewModel
     @Environment(\.dismiss) private var dismiss
@@ -16,13 +23,11 @@ struct NowPlayingView: View {
 
     var body: some View {
         ZStack {
-            // 动态背景层
-            backgroundLayer
+            // 背景：由封面主色调铺成的渐变（不是模糊封面）
+            PlayerBackground(coverPath: viewModel.currentSong?.resolvedCoverArtPath)
 
             VStack(spacing: 0) {
-                headerBar
-                    .padding(.horizontal, 20)
-                    .padding(.top, 8)
+                topBar
 
                 // 左右滑动切页：左=播放器，右=歌词
                 //
@@ -36,28 +41,14 @@ struct NowPlayingView: View {
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
 
-                pageIndicator
-
-                // 下方控制区：进度 / 控制 / 操作，紧凑地收在屏幕下段
-                VStack(spacing: 8) {
-                    ProgressSection(
-                        waveformSamples: waveformSamples,
-                        onSeek: { time in viewModel.seek(to: time) }
-                    )
-
-                    controlsRow
-
-                    actionsRow
-                }
-                .padding(.horizontal, 28)
-                .padding(.bottom, 10)
+                bottomControls
             }
         }
         // 注：这里不要再挂 .animation(value: viewModel.playbackState) ——
         // 那会让所有随播放状态变化的属性（封面、按钮…）统统走动画，
         // 暂停时整个页面会跟着「闪」一下。各控件自己有需要的动画。
-        // 强制深色：这是沉浸式深色界面，且能让 .ultraThinMaterial 渲染成深色，
-        // 否则浅色模式下白色图标压在浅色毛玻璃上会看不见（返回键曾因此"消失"）
+        //
+        // 强制深色：白色图标与文字全部压在深色封面主色上，浅色模式下会失对比。
         .environment(\.colorScheme, .dark)
         // 注：这里刻意**不加**下滑关闭手势 —— 页面本身是左右翻页的 TabView，
         // 外层再挂 DragGesture 会和系统翻页抢手势（表现就是"滑不动/点了没反应"）。
@@ -67,30 +58,183 @@ struct NowPlayingView: View {
         }
     }
 
+    // MARK: - 顶部：收起 / 页签 / 分享
+
+    private var topBar: some View {
+        ZStack {
+            // 中间页签（对齐咪咕把页面切换放在顶部正中的做法）
+            HStack(spacing: 20) {
+                pageTab(title: "播放", index: 0)
+                pageTab(title: "歌词", index: 1)
+            }
+
+            HStack {
+                Button {
+                    HapticStyle.light.trigger()
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(width: 40, height: 40)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(BouncyButtonStyle(scale: 0.88))
+                .accessibilityLabel("收起播放页")
+
+                Spacer()
+
+                ShareLink(item: shareText) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundColor(.white)
+                        .frame(width: 40, height: 40)
+                        .contentShape(Rectangle())
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 6)
+        .padding(.bottom, 8)
+    }
+
+    /// 顶部页签：选中项白色 + 下划线（咪咕的样式）
+    private func pageTab(title: String, index: Int) -> some View {
+        let isSelected = page == index
+
+        return Button {
+            HapticStyle.selection.trigger()
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                page = index
+            }
+        } label: {
+            VStack(spacing: 5) {
+                Text(title)
+                    .font(.system(size: 16, weight: isSelected ? .semibold : .regular))
+                    .foregroundColor(isSelected ? .white : .white.opacity(0.5))
+
+                Capsule()
+                    .fill(isSelected ? Color.white : Color.clear)
+                    .frame(width: 22, height: 2.5)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - 下段：操作 / 进度 / 控制
+
+    private var bottomControls: some View {
+        VStack(spacing: 14) {
+            actionsRow
+
+            VStack(alignment: .leading, spacing: 5) {
+                ProgressSection(
+                    waveformSamples: waveformSamples,
+                    onSeek: { time in viewModel.seek(to: time) }
+                )
+
+                ProgressTimeLabel()
+            }
+
+            controlsRow
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 14)
+    }
+
     // MARK: - 第 0 页：播放器
 
-    /// 上半屏：圆角方形封面（视觉主体）+ 歌曲信息
+    /// 上半屏：圆角方形封面 + 左对齐的歌曲信息
     ///
-    /// 布局参考咪咕音乐：封面是「大头」，占据上半部分；播放控件全部压到下半屏。
+    /// 布局对齐咪咕：封面是「大头」，信息整体**左对齐**并带标签胶囊，
+    /// 而不是居中的两三行字 —— 左对齐让页面有版式张力，也更适配长短不一的中文歌名。
     private var playerPage: some View {
         GeometryReader { geo in
-            // 取「宽度减两边距」与「高度 82%」中较小者，保证各种屏幕都不顶破
-            let side = min(geo.size.width - 64, geo.size.height * 0.82)
+            // 取「宽度减两边距」与「高度 86%」中较小者，保证各种屏幕都不顶破
+            let side = min(geo.size.width - 56, geo.size.height * 0.86)
 
-            VStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 0) {
                 Spacer(minLength: 0)
 
                 PlayerCoverArt(
                     coverPath: viewModel.currentSong?.resolvedCoverArtPath,
                     size: side
                 )
+                .frame(maxWidth: .infinity)
 
-                songInfoCard
+                Spacer(minLength: 20)
+
+                songInfoBlock
+                    .padding(.horizontal, 24)
 
                 Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity)
         }
+    }
+
+    // MARK: - 歌曲信息（左对齐 + 标签胶囊 + 喜欢）
+
+    private var songInfoBlock: some View {
+        HStack(alignment: .top, spacing: 14) {
+            VStack(alignment: .leading, spacing: 9) {
+                Text(viewModel.currentSong?.title ?? "")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+
+                HStack(spacing: 6) {
+                    if let song = viewModel.currentSong {
+                        tagChip(song.displayArtist)
+                        tagChip(song.format.uppercased())
+                        if song.bitrate > 320 {
+                            tagChip("无损", highlighted: true)
+                        }
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            favoriteButton
+                .padding(.top, 2)
+        }
+    }
+
+    /// 标签胶囊
+    private func tagChip(_ text: String, highlighted: Bool = false) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundColor(highlighted ? ColorPalette.amber : .white.opacity(0.85))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                Capsule().fill(
+                    highlighted
+                        ? ColorPalette.amber.opacity(0.18)
+                        : Color.white.opacity(0.14)
+                )
+            )
+    }
+
+    private var favoriteButton: some View {
+        let isFavorite = viewModel.currentSong.map { viewModel.isFavorite($0) } ?? false
+
+        return Button {
+            HapticStyle.light.trigger()
+            if let song = viewModel.currentSong {
+                viewModel.toggleFavorite(song)
+            }
+        } label: {
+            Image(systemName: isFavorite ? "heart.fill" : "heart")
+                .font(.system(size: 22))
+                .foregroundColor(isFavorite ? ColorPalette.coral : .white.opacity(0.8))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(BouncyButtonStyle(scale: 0.86))
+        .accessibilityLabel(isFavorite ? "取消喜欢" : "喜欢")
     }
 
     // MARK: - 第 1 页：歌词
@@ -102,169 +246,11 @@ struct NowPlayingView: View {
 
     // MARK: - 页码指示点
 
-    private var pageIndicator: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<2, id: \.self) { index in
-                Capsule()
-                    .fill(index == page ? Color.white.opacity(0.9) : Color.white.opacity(0.25))
-                    .frame(width: index == page ? 18 : 6, height: 6)
-            }
-        }
-        .padding(.vertical, 6)
-        .animation(.spring(response: 0.3, dampingFraction: 0.75), value: page)
-        .accessibilityHidden(true)
-    }
-
     // MARK: - 背景层
 
     @ViewBuilder
-    private var backgroundLayer: some View {
-        if let image = viewModel.currentSong?.coverImage {
-            ZStack {
-                // 放大的模糊封面
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .blur(radius: 50)
-                    .scaleEffect(1.3)
-
-                // 渐变遮罩
-                LinearGradient(
-                    colors: [
-                        Color.black.opacity(0.55),
-                        Color.black.opacity(0.35),
-                        Color.black.opacity(0.5)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-
-                // 装饰性光晕（静态）
-                //
-                // 这里原来是 floatingAnimation 持续飘动的大面积模糊圆，
-                // 意味着每一帧都要重新合成一块 350pt、blur 80 的图层 ——
-                // 纯粹装饰却极其吃 GPU。改成静止后视觉几乎无差别，帧率明显改善。
-                Circle()
-                    .fill(ColorPalette.primary.opacity(0.08))
-                    .frame(width: 350, height: 350)
-                    .blur(radius: 80)
-                    .offset(y: -100)
-            }
-            .ignoresSafeArea()
-        } else {
-            ZStack {
-                ColorPalette.gradientPrimary
-                    .ignoresSafeArea()
-
-                Circle()
-                    .fill(Color.white.opacity(0.05))
-                    .frame(width: 300, height: 300)
-                    .blur(radius: 60)
-                    .offset(x: 100, y: -200)
-
-                Circle()
-                    .fill(ColorPalette.secondary.opacity(0.05))
-                    .frame(width: 250, height: 250)
-                    .blur(radius: 60)
-                    .offset(x: -80, y: 100)
-            }
-            .ignoresSafeArea()
-        }
-    }
 
     // MARK: - 顶部栏
-
-    private var headerBar: some View {
-        HStack {
-            // 收起按钮（弹性交互）
-            Button(action: {
-                HapticStyle.light.trigger()
-                dismiss()
-            }) {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 19, weight: .bold))
-                    .foregroundColor(.white)
-                    .frame(width: 44, height: 44)   // 44pt 是 iOS 最小可点区域
-                    .background(.ultraThinMaterial)
-                    .clipShape(Circle())
-                    .overlay(Circle().stroke(.white.opacity(0.15), lineWidth: 1))
-            }
-            .buttonStyle(BouncyButtonStyle(scale: 0.9))
-            .accessibilityLabel("收起播放页")
-
-            Spacer()
-
-            // 中间抓手：既是「可下拉关闭」的视觉提示，
-            // 也让这一整条顶部栏成为可拖拽区域
-            Capsule()
-                .fill(.white.opacity(0.28))
-                .frame(width: 40, height: 5)
-
-            Spacer()
-
-            // 更多菜单
-            Menu {
-                Section("播放模式") {
-                    ForEach(PlayMode.allCases, id: \.rawValue) { mode in
-                        Button(action: {
-                            while viewModel.playMode != mode {
-                                viewModel.togglePlayMode()
-                            }
-                        }) {
-                            Label(
-                                mode.rawValue,
-                                systemImage: viewModel.playMode == mode
-                                    ? "checkmark"
-                                    : mode.iconName
-                            )
-                        }
-                    }
-                }
-
-                Section("音质") {
-                    Button(action: {}) {
-                        Label("均衡器", systemImage: "slider.horizontal.3")
-                    }
-                    Button(action: {}) {
-                        Label("睡眠定时", systemImage: "moon.zzz")
-                    }
-                }
-
-                Section("信息") {
-                    if let song = viewModel.currentSong {
-                        Button(action: {}) {
-                            Label("文件信息: \(song.format.uppercased()) \(song.fileSizeFormatted)",
-                                  systemImage: "doc.text")
-                        }
-                    }
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.8))
-                    .frame(width: 36, height: 36)
-                    .background(.ultraThinMaterial)
-                    .clipShape(Circle())
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 8)
-        .padding(.bottom, 6)
-        .contentShape(Rectangle())
-        // 下拉关闭只挂在顶部栏这一条 ——
-        // 页面中间是左右翻页的 TabView，在那里挂拖拽手势会抢掉系统翻页
-        .gesture(
-            DragGesture(minimumDistance: 20)
-                .onEnded { value in
-                    let dy = value.translation.height
-                    let dx = value.translation.width
-                    if dy > 55 && abs(dx) < abs(dy) {
-                        HapticStyle.light.trigger()
-                        dismiss()
-                    }
-                }
-        )
-    }
 
     // MARK: - 增强版专辑封面
 
@@ -274,36 +260,6 @@ struct NowPlayingView: View {
     // 视觉上就是猛地转一下 —— 这也是暂停时"闪烁"的来源之一。
 
     // MARK: - 毛玻璃歌曲信息卡片
-
-    /// 歌曲信息（歌名 / 歌手 / 专辑）
-    ///
-    /// 刻意**不加**卡片背景 —— 播放页整块都是沉浸式背景，
-    /// 再叠一层纯色/毛玻璃会显得很脏（参考网易云、Apple Music 都是纯文字压在背景上）。
-    private var songInfoCard: some View {
-        VStack(spacing: 6) {
-            if let song = viewModel.currentSong {
-                Text(song.title)
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-                    .id(song.id)
-                    .transition(.opacity.combined(with: .move(edge: .leading)))
-
-                Text(song.displayArtist)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.white.opacity(0.7))
-                    .lineLimit(1)
-
-                if !song.album.isEmpty {
-                    Text(song.album)
-                        .font(.system(size: 13))
-                        .foregroundColor(.white.opacity(0.5))
-                        .lineLimit(1)
-                }
-            }
-        }
-        .padding(.vertical, 4)
-    }
 
     // MARK: - 增强版播放控制
 
@@ -392,51 +348,56 @@ struct NowPlayingView: View {
     ///
     /// 布局说明：每个按钮都 `.frame(maxWidth: .infinity)` 四等分，
     /// 这样在窄屏（如 iPhone SE / mini）上也不会溢出到屏幕外。
+    /// 操作行：一排纯白图标（对齐咪咕 —— 无底色、无文字标签）
     private var actionsRow: some View {
         let song = viewModel.currentSong
-        let isFavorite = song.map { viewModel.isFavorite($0) } ?? false
 
-        return Group {
-            HStack(spacing: 0) {
-                ActionButton(
-                    icon: isFavorite ? "heart.fill" : "heart",
-                    label: "喜欢",
-                    tint: isFavorite ? ColorPalette.accent : nil
-                ) {
-                    if let song = song { viewModel.toggleFavorite(song) }
-                }
-
-                ActionButton(icon: "list.bullet", label: "队列") {
-                    showQueue = true
-                }
-
-                ShareLink(item: shareText) {
-                    actionLabel(icon: "square.and.arrow.up", label: "分享")
-                }
-
-                Menu {
-                    if let song = song {
-                        Section("歌曲信息") {
-                            Text("\(song.title) · \(song.displayArtist)")
-                            Text("\(song.format.uppercased()) · \(song.fileSizeFormatted)")
-                        }
-                    }
-                    Section("播放模式") {
-                        ForEach(PlayMode.allCases, id: \.rawValue) { mode in
-                            Button {
-                                while viewModel.playMode != mode { viewModel.togglePlayMode() }
-                            } label: {
-                                Label(mode.rawValue,
-                                      systemImage: viewModel.playMode == mode ? "checkmark" : mode.iconName)
-                            }
-                        }
-                    }
-                } label: {
-                    actionLabel(icon: "ellipsis.circle", label: "更多")
+        return HStack(spacing: 0) {
+            // 歌词
+            ActionButton(icon: "text.bubble", label: nil) {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    page = 1
                 }
             }
-            .padding(.vertical, 2)
-            .padding(.horizontal, 6)
+
+            // 播放队列
+            ActionButton(icon: "list.bullet", label: nil) {
+                showQueue = true
+            }
+
+            // 播放模式
+            ActionButton(
+                icon: viewModel.playMode.iconName,
+                label: nil,
+                tint: viewModel.playMode == .sequential ? nil : ColorPalette.amber
+            ) {
+                viewModel.togglePlayMode()
+            }
+
+            ShareLink(item: shareText) {
+                actionLabel(icon: "square.and.arrow.up", label: nil)
+            }
+
+            Menu {
+                if let song = song {
+                    Section("歌曲信息") {
+                        Text("\(song.title) · \(song.displayArtist)")
+                        Text("\(song.format.uppercased()) · \(song.fileSizeFormatted)")
+                    }
+                }
+                Section("播放模式") {
+                    ForEach(PlayMode.allCases, id: \.rawValue) { mode in
+                        Button {
+                            while viewModel.playMode != mode { viewModel.togglePlayMode() }
+                        } label: {
+                            Label(mode.rawValue,
+                                  systemImage: viewModel.playMode == mode ? "checkmark" : mode.iconName)
+                        }
+                    }
+                }
+            } label: {
+                actionLabel(icon: "ellipsis", label: nil)
+            }
         }
         .sheet(isPresented: $showQueue) {
             QueueSheet()
@@ -450,17 +411,20 @@ struct NowPlayingView: View {
         return "\(song.title) - \(song.displayArtist)"
     }
 
-    /// 按钮外观（ShareLink / Menu 复用，保证四个按钮视觉一致）
-    private func actionLabel(icon: String, label: String) -> some View {
-        VStack(spacing: 5) {
+    /// 按钮外观（ShareLink / Menu 复用，保证一排图标视觉一致）
+    private func actionLabel(icon: String, label: String?) -> some View {
+        VStack(spacing: 4) {
             Image(systemName: icon)
-                .font(.system(size: 17))
-                .foregroundColor(.white.opacity(0.82))
-            Text(label)
-                .font(.system(size: 10))
-                .foregroundColor(.white.opacity(0.55))
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .font(.system(size: 20))
+                .foregroundColor(.white.opacity(0.9))
+
+            if let label = label {
+                Text(label)
+                    .font(.system(size: 10))
+                    .foregroundColor(.white.opacity(0.55))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
         }
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
@@ -492,8 +456,23 @@ private struct ProgressSection: View {
             duration: clock.duration,
             currentTime: clock.currentTime,
             waveformSamples: waveformSamples,
+            // 时间放到进度条下方（咪咕的排版），这里不再左右各放一个
+            showTimeLabels: false,
             onSeek: onSeek
         )
+    }
+}
+
+// MARK: - 进度时间
+
+/// 「00:42 / 03:59」——单独观察时钟，避免整个播放页跟着 10Hz 重绘
+private struct ProgressTimeLabel: View {
+    @ObservedObject private var clock = PlaybackClock.shared
+
+    var body: some View {
+        Text("\(PlaybackClock.format(clock.currentTime)) / \(PlaybackClock.format(clock.duration))")
+            .font(.system(size: 12, design: .monospaced))
+            .foregroundColor(.white.opacity(0.6))
     }
 }
 
@@ -561,7 +540,8 @@ struct ControlButton: View {
 
 struct ActionButton: View {
     let icon: String
-    let label: String
+    /// 传 nil 则只画图标（咪咕的操作行就没有文字标签）
+    var label: String?
     var tint: Color? = nil
     let action: () -> Void
 
@@ -570,21 +550,24 @@ struct ActionButton: View {
             HapticStyle.light.trigger()
             action()
         }) {
-            VStack(spacing: 5) {
+            VStack(spacing: 4) {
                 Image(systemName: icon)
-                    .font(.system(size: 17))
-                    .foregroundColor(tint ?? .white.opacity(0.82))
-                Text(label)
-                    .font(.system(size: 10))
-                    .foregroundColor(.white.opacity(0.55))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .font(.system(size: 20))
+                    .foregroundColor(tint ?? .white.opacity(0.9))
+
+                if let label = label {
+                    Text(label)
+                        .font(.system(size: 10))
+                        .foregroundColor(.white.opacity(0.55))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
             }
-            // 四等分，窄屏也不会溢出
+            // 等分，窄屏也不会溢出
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
         }
-        .buttonStyle(BouncyButtonStyle(scale: 0.88))
+        .buttonStyle(BouncyButtonStyle(scale: 0.86))
     }
 }
 

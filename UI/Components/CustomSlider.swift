@@ -6,6 +6,8 @@ struct MusicProgressSlider: View {
     var duration: TimeInterval
     var currentTime: TimeInterval
     var waveformSamples: [CGFloat] = []
+    /// 是否显示左右两侧的时间（咪咕风格把时间放在条下方，此时置 false）
+    var showTimeLabels: Bool = true
     var onSeek: ((TimeInterval) -> Void)?
 
     @State private var isDragging = false
@@ -28,22 +30,24 @@ struct MusicProgressSlider: View {
     }
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             // 主滑块
             sliderTrack
-                .frame(height: 24)
+                .frame(height: 22)
 
-            // 时间标签
-            HStack {
-                Text(formatTime(isDragging ? dragProgress * duration : currentTime))
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundColor(.secondary)
+            // 时间标签（咪咕把时间放在进度条**下方**，需要时置 false 由调用方自己排版）
+            if showTimeLabels {
+                HStack {
+                    Text(formatTime(isDragging ? dragProgress * duration : currentTime))
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(.secondary)
 
-                Spacer()
+                    Spacer()
 
-                Text(formatTime(-(duration - (isDragging ? dragProgress * duration : currentTime))))
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundColor(.secondary)
+                    Text(formatTime(-(duration - (isDragging ? dragProgress * duration : currentTime))))
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(.secondary)
+                }
             }
         }
     }
