@@ -9,6 +9,8 @@ struct LibraryView: View {
     @State private var isSearching = false
     @State private var showScanAnimation = false
     @State private var showImporter = false
+    /// 导航栈路径 —— 需要一个可清空的引用，底部标签栏才能「一键回到根」
+    @State private var navPath = NavigationPath()
     @State private var importResultMessage: String?
 
     enum LibraryTab: String, CaseIterable {
@@ -33,7 +35,7 @@ struct LibraryView: View {
             theme.backgroundColor
                 .ignoresSafeArea()
 
-            NavigationStack {
+            NavigationStack(path: $navPath) {
                 rootContent
                     // 用 .toolbar(.hidden) 而非 navigationBarHidden：
                     // 后者在 iOS 16 下会把 push 出来的子页面导航栏和返回按钮一起压掉
@@ -94,6 +96,12 @@ struct LibraryView: View {
                     HapticStyle.selection.trigger()
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                         selectedTab = tab
+                    }
+                    // 标签栏浮在导航栈之外，push 到歌手/专辑详情页时依然可见。
+                    // 不清空路径的话，点标签只会换 selectedTab，
+                    // 界面还停在详情页上 —— 看起来就是「点了没反应」。
+                    if !navPath.isEmpty {
+                        navPath = NavigationPath()
                     }
                 } label: {
                     VStack(spacing: 3) {

@@ -38,29 +38,24 @@ struct NowPlayingView: View {
 
                 pageIndicator
 
-                // 注：这里原本有一条「实时频谱」动画。它不是真实音频分析，
-                // 而是每 0.2 秒重排 26 根柱子，持续占用 GPU 且没有任何信息量，
-                // 播放页的卡顿主要来自它 —— 已移除。
+                // 下方控制区：进度 / 控制 / 操作，紧凑地收在屏幕下段
+                VStack(spacing: 8) {
+                    ProgressSection(
+                        waveformSamples: waveformSamples,
+                        onSeek: { time in viewModel.seek(to: time) }
+                    )
 
-                // 以下为两页共用：进度、控制、操作
-                ProgressSection(
-                    waveformSamples: waveformSamples,
-                    onSeek: { time in viewModel.seek(to: time) }
-                )
-                .padding(.horizontal, 32)
-                .padding(.top, 6)
+                    controlsRow
 
-                enhancedControlsSection
-                    .padding(.horizontal, 32)
-                    .padding(.top, 10)
-
-                actionCard
-                    .padding(.horizontal, 32)
-                    .padding(.top, 8)
-                    .padding(.bottom, 6)
+                    actionsRow
+                }
+                .padding(.horizontal, 28)
+                .padding(.bottom, 10)
             }
         }
-        .animation(.easeInOut(duration: 0.4), value: viewModel.playbackState)
+        // 注：这里不要再挂 .animation(value: viewModel.playbackState) ——
+        // 那会让所有随播放状态变化的属性（封面、按钮…）统统走动画，
+        // 暂停时整个页面会跟着「闪」一下。各控件自己有需要的动画。
         // 强制深色：这是沉浸式深色界面，且能让 .ultraThinMaterial 渲染成深色，
         // 否则浅色模式下白色图标压在浅色毛玻璃上会看不见（返回键曾因此"消失"）
         .environment(\.colorScheme, .dark)
@@ -74,16 +69,27 @@ struct NowPlayingView: View {
 
     // MARK: - 第 0 页：播放器
 
+    /// 上半屏：圆角方形封面（视觉主体）+ 歌曲信息
+    ///
+    /// 布局参考咪咕音乐：封面是「大头」，占据上半部分；播放控件全部压到下半屏。
     private var playerPage: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(spacing: 22) {
-                enhancedAlbumArtSection
-                    .padding(.top, 4)
+        GeometryReader { geo in
+            // 取「宽度减两边距」与「高度 82%」中较小者，保证各种屏幕都不顶破
+            let side = min(geo.size.width - 64, geo.size.height * 0.82)
+
+            VStack(spacing: 16) {
+                Spacer(minLength: 0)
+
+                PlayerCoverArt(
+                    coverPath: viewModel.currentSong?.resolvedCoverArtPath,
+                    size: side
+                )
 
                 songInfoCard
-                    .padding(.horizontal, 32)
+
+                Spacer(minLength: 0)
             }
-            .padding(.bottom, 12)
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -262,19 +268,10 @@ struct NowPlayingView: View {
 
     // MARK: - 增强版专辑封面
 
-    private var enhancedAlbumArtSection: some View {
-        VStack(spacing: 0) {
-            // 去掉了「播放时封面弹一下」的缩放动画 ——
-            // 封面本身在持续旋转，再叠加缩放会让这块大图层每帧重新合成，
-            // 收益（一点点弹跳）远小于代价
-            VinylRecordView(
-                coverImagePath: viewModel.currentSong?.resolvedCoverArtPath,
-                isPlaying: viewModel.playbackState == .playing,
-                size: 274
-            )
-            .shadow(color: .black.opacity(0.28), radius: 18, x: 0, y: 10)
-        }
-    }
+    // 封面已换成玩家页的 PlayerCoverArt（圆角方形），
+    // 旧的 VinylRecordView（黑胶圆形 + 持续旋转）不再使用。
+    // 旋转有个副作用：暂停时为了让唱片「停稳」会把角度归到 360 的整数倍，
+    // 视觉上就是猛地转一下 —— 这也是暂停时"闪烁"的来源之一。
 
     // MARK: - 毛玻璃歌曲信息卡片
 
@@ -310,12 +307,13 @@ struct NowPlayingView: View {
 
     // MARK: - 增强版播放控制
 
-    private var enhancedControlsSection: some View {
+    /// 播放控制（整体缩小，收在屏幕下段）
+    private var controlsRow: some View {
         HStack(spacing: 0) {
             // 播放模式
             ControlButton(
                 systemName: viewModel.playMode.iconName,
-                size: 18,
+                size: 15,
                 isActive: viewModel.playMode != .sequential,
                 action: {
                     HapticStyle.selection.trigger()
@@ -328,7 +326,7 @@ struct NowPlayingView: View {
             // 上一首
             ControlButton(
                 systemName: "backward.fill",
-                size: 26,
+                size: 22,
                 action: {
                     HapticStyle.medium.trigger()
                     viewModel.playPrevious()
@@ -337,7 +335,6 @@ struct NowPlayingView: View {
 
             Spacer()
 
-            // 中心播放/暂停（弹性 + 光晕）
             playPauseButton
 
             Spacer()
@@ -345,7 +342,7 @@ struct NowPlayingView: View {
             // 下一首
             ControlButton(
                 systemName: "forward.fill",
-                size: 26,
+                size: 22,
                 action: {
                     HapticStyle.medium.trigger()
                     viewModel.playNext()
@@ -354,16 +351,15 @@ struct NowPlayingView: View {
 
             Spacer()
 
-            // 音量/均衡器
+            // 音量
             ControlButton(
                 systemName: "speaker.wave.2.fill",
-                size: 18,
+                size: 15,
                 action: {
                     HapticStyle.light.trigger()
                 }
             )
         }
-        .padding(.vertical, 8)
     }
 
     /// 中心播放/暂停按钮（增强版动画）
@@ -380,12 +376,11 @@ struct NowPlayingView: View {
             viewModel.togglePlayPause()
         }) {
             Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                .font(.system(size: 38, weight: .medium))
+                .font(.system(size: 32, weight: .medium))
                 .foregroundColor(.white)
-                .shadow(color: .black.opacity(0.3), radius: 8)
                 // 「播放」三角形视觉重心偏左，右移一点点看起来才居中
                 .offset(x: isPlaying ? 0 : 2)
-                .frame(width: 68, height: 68)
+                .frame(width: 56, height: 56)
                 .contentShape(Rectangle())
         }
         .buttonStyle(BouncyButtonStyle(scale: 0.88))
@@ -397,7 +392,7 @@ struct NowPlayingView: View {
     ///
     /// 布局说明：每个按钮都 `.frame(maxWidth: .infinity)` 四等分，
     /// 这样在窄屏（如 iPhone SE / mini）上也不会溢出到屏幕外。
-    private var actionCard: some View {
+    private var actionsRow: some View {
         let song = viewModel.currentSong
         let isFavorite = song.map { viewModel.isFavorite($0) } ?? false
 
@@ -440,7 +435,7 @@ struct NowPlayingView: View {
                     actionLabel(icon: "ellipsis.circle", label: "更多")
                 }
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, 2)
             .padding(.horizontal, 6)
         }
         .sheet(isPresented: $showQueue) {
@@ -457,13 +452,13 @@ struct NowPlayingView: View {
 
     /// 按钮外观（ShareLink / Menu 复用，保证四个按钮视觉一致）
     private func actionLabel(icon: String, label: String) -> some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 5) {
             Image(systemName: icon)
-                .font(.system(size: 19))
-                .foregroundColor(.white.opacity(0.85))
+                .font(.system(size: 17))
+                .foregroundColor(.white.opacity(0.82))
             Text(label)
-                .font(.system(size: 11))
-                .foregroundColor(.white.opacity(0.6))
+                .font(.system(size: 10))
+                .foregroundColor(.white.opacity(0.55))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
@@ -502,6 +497,41 @@ private struct ProgressSection: View {
     }
 }
 
+// MARK: - 播放页封面（圆角方形）
+
+/// 大封面：圆角方形，占据上半屏
+///
+/// 刻意**不做旋转**。唱片式旋转除了好看没有任何功能意义，
+/// 却要持续重绘一整块带阴影的大图层；而且暂停时为了让唱片「停稳」
+/// 必须把角度归到 360 的整数倍，视觉上就是猛地转一下 ——
+/// 这正是暂停时"闪一下"的来源。
+struct PlayerCoverArt: View {
+    let coverPath: String?
+    let size: CGFloat
+
+    private var cornerRadius: CGFloat { size * 0.06 }
+
+    var body: some View {
+        Group {
+            if let path = coverPath, let image = UIImage(contentsOfFile: path) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                ColorPalette.gradientPrimary
+                    .overlay(
+                        Image(systemName: "music.note")
+                            .font(.system(size: size * 0.2))
+                            .foregroundColor(.white.opacity(0.55))
+                    )
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .shadow(color: .black.opacity(0.35), radius: 24, x: 0, y: 14)
+    }
+}
+
 // MARK: - 控制按钮子组件
 
 /// 播放控制栏里的次要按钮（播放模式 / 上一首 / 下一首 / 音量）
@@ -522,7 +552,7 @@ struct ControlButton: View {
             Image(systemName: systemName)
                 .font(.system(size: size))
                 .foregroundColor(isActive ? .white : .white.opacity(0.72))
-                .frame(width: 46, height: 46)
+                .frame(width: 42, height: 42)
                 .contentShape(Rectangle())
         }
         .buttonStyle(BouncyButtonStyle(scale: 0.84))
@@ -540,13 +570,13 @@ struct ActionButton: View {
             HapticStyle.light.trigger()
             action()
         }) {
-            VStack(spacing: 6) {
+            VStack(spacing: 5) {
                 Image(systemName: icon)
-                    .font(.system(size: 19))
-                    .foregroundColor(tint ?? .white.opacity(0.85))
+                    .font(.system(size: 17))
+                    .foregroundColor(tint ?? .white.opacity(0.82))
                 Text(label)
-                    .font(.system(size: 11))
-                    .foregroundColor(.white.opacity(0.6))
+                    .font(.system(size: 10))
+                    .foregroundColor(.white.opacity(0.55))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
