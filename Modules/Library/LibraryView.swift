@@ -421,11 +421,12 @@ struct LibraryView: View {
                 List {
                     ForEach(Array(artistItems.enumerated()), id: \.element.id) { index, item in
                         NavigationLink(value: LibraryRoute.artist(item.name)) {
+                            // 列表里用小头像：横版的歌手照片塞进 44pt 圆会被裁得很难看，
+                            // 这里统一用正方形的专辑封面；大幅照片留给详情页横幅
                             ArtistRowView(
                                 artist: item.name,
                                 songCount: item.songCount,
                                 index: index,
-                                bundledPhoto: item.bundledPhoto,
                                 coverPath: item.coverPath
                             )
                         }
@@ -568,8 +569,7 @@ struct ArtistRowView: View {
     let artist: String
     let songCount: Int
     let index: Int
-    /// 歌手头像：优先包内照片，其次最早一张专辑的封面，都没有才用首字渐变圆
-    var bundledPhoto: UIImage? = nil
+    /// 歌手头像：最早一张专辑的封面，没有才用首字渐变圆
     var coverPath: String? = nil
 
     var body: some View {
@@ -597,12 +597,8 @@ struct ArtistRowView: View {
         let side: CGFloat = 44
 
         Group {
-            if let photo = bundledPhoto {
-                Image(uiImage: photo)
-                    .resizable()
-                    .scaledToFill()
-            } else if let path = coverPath,
-                      let cover = UIImage(contentsOfFile: path) {
+            if let path = coverPath,
+               let cover = UIImage(contentsOfFile: path) {
                 Image(uiImage: cover)
                     .resizable()
                     .scaledToFill()

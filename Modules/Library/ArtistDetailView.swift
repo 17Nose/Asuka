@@ -57,24 +57,80 @@ struct ArtistDetailView: View {
 
     // MARK: - 歌手头像
 
-    /// 大头像
+    /// 头部：有照片 → 满宽横幅；没有 → 圆形头像
     ///
-    /// 三级来源（详见 `ArtistArtwork`）：
-    /// 1. 你手动放进 `Resources/Artists/` 的照片
-    /// 2. 该歌手**最早一张专辑**的封面 —— 周杰伦就是《Jay》那张，本身就有人像，
-    ///    比顶一个「周」字自然得多
-    /// 3. 都没有才回退到「首字 + 渐变圆」
+    /// 放照片的方法见 `ArtistArtwork`：仓库 `Resources/Artists/<歌手名>.jpg`。
+    @ViewBuilder
+    private var header: some View {
+        if let photo = ArtistArtwork.bundledPhoto(for: artistName) {
+            bannerHeader(photo)
+        } else {
+            circularHeader
+        }
+    }
+
+    /// 满宽横幅
+    ///
+    /// 歌手照片通常是横图（比如这张 3.15:1 的），塞进圆形会被裁掉大半。
+    /// 铺成横幅既完整展示，也是 Apple Music 歌手页的做法。
+    private func bannerHeader(_ photo: UIImage) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Image(uiImage: photo)
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: .infinity)
+                .frame(height: 200)
+                .clipped()
+                // 底部渐隐到页面背景，避免横幅和下方文字硬切一刀
+                .overlay(
+                    LinearGradient(
+                        colors: [.clear, theme.backgroundColor.opacity(0.85)],
+                        startPoint: .center,
+                        endPoint: .bottom
+                    )
+                )
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(artistName)
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(theme.textPrimary)
+
+                Text(summary)
+                    .font(.system(size: 14))
+                    .foregroundColor(theme.textSecondary)
+            }
+            .padding(.horizontal, 20)
+        }
+    }
+
+    /// 没有照片时的圆形头像 + 居中姓名
+    private var circularHeader: some View {
+        VStack(spacing: 14) {
+            avatar
+
+            VStack(spacing: 6) {
+                Text(artistName)
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(theme.textPrimary)
+                    .multilineTextAlignment(.center)
+
+                Text(summary)
+                    .font(.system(size: 14))
+                    .foregroundColor(theme.textSecondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 16)
+    }
+
+    /// 圆形头像（照片 → 最早专辑封面 → 首字渐变圆）
     @ViewBuilder
     private var avatar: some View {
         let side: CGFloat = 148
 
         Group {
-            if let photo = ArtistArtwork.bundledPhoto(for: artistName) {
-                Image(uiImage: photo)
-                    .resizable()
-                    .scaledToFill()
-            } else if let path = representativeCoverPath,
-                      let cover = UIImage(contentsOfFile: path) {
+            if let path = representativeCoverPath,
+               let cover = UIImage(contentsOfFile: path) {
                 Image(uiImage: cover)
                     .resizable()
                     .scaledToFill()
@@ -100,28 +156,6 @@ struct ArtistDetailView: View {
     /// 代表封面：专辑按年份倒序排列，取最后一张 = 最早那张
     private var representativeCoverPath: String? {
         albums.last?.coverPath
-    }
-
-    // MARK: - 头部
-
-    private var header: some View {
-        VStack(spacing: 14) {
-            avatar
-
-            VStack(spacing: 6) {
-                Text(artistName)
-                    .font(.system(size: 28, weight: .bold))
-                    .foregroundColor(theme.textPrimary)
-                    .multilineTextAlignment(.center)
-
-                Text(summary)
-                    .font(.system(size: 14))
-                    .foregroundColor(theme.textSecondary)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 16)
-        .padding(.horizontal, 20)
     }
 
     // MARK: - 播放按钮

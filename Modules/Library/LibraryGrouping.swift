@@ -28,8 +28,6 @@ struct ArtistItem: Identifiable {
     let albumCount: Int
     /// 最早一张专辑的封面，用作歌手头像（没有时回退到首字渐变圆）
     let coverPath: String?
-    /// 手动放进 Resources/Artists/ 的照片，优先级高于封面
-    var bundledPhoto: UIImage? { ArtistArtwork.bundledPhoto(for: name) }
 
     var id: String { name }
 
