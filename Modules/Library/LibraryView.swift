@@ -606,18 +606,9 @@ struct ArtistRowView: View {
         .padding(.horizontal, 4)
     }
 
-    /// 根据索引生成不同色调
+    /// 根据索引取色（统一走 ColorPalette.hues 的撞色组）
     private var hueColor: Color {
-        let colors: [Color] = [
-            ColorPalette.primary,
-            Color(hex: "0984E3"),
-            Color(hex: "00B894"),
-            Color(hex: "E17055"),
-            Color(hex: "FD79A8"),
-            Color(hex: "6C5CE7"),
-            Color(hex: "00CEC9"),
-        ]
-        return colors[index % colors.count]
+        ColorPalette.hues[index % ColorPalette.hues.count]
     }
 }
 

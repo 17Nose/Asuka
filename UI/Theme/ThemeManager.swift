@@ -36,26 +36,26 @@ final class ThemeManager: ObservableObject {
 
     // MARK: - 主题色方案
 
-    /// 预定义主题色
+    /// 预定义主题色（默认第一个 = 珊瑚红，有意避开千篇一律的科技蓝）
     static let accentColors: [(name: String, color: Color)] = [
-        ("紫罗兰", Color(hex: "6C5CE7")),
-        ("海洋蓝", Color(hex: "0984E3")),
-        ("珊瑚粉", Color(hex: "FD79A8")),
-        ("翡翠绿", Color(hex: "00B894")),
-        ("日落橙", Color(hex: "E17055")),
-        ("青碧", Color(hex: "00CEC9")),
-        ("暗夜紫", Color(hex: "A29BFE")),
-        ("玫瑰金", Color(hex: "E84393")),
+        ("珊瑚", Color(hex: "FF6B6B")),
+        ("落日", Color(hex: "FF9F43")),
+        ("琥珀", Color(hex: "FFD166")),
+        ("薄荷", Color(hex: "3DDC97")),
+        ("玫瑰", Color(hex: "F368A4")),
+        ("葡萄", Color(hex: "A78BFA")),
+        ("青柠", Color(hex: "A3E635")),
+        ("靛青", Color(hex: "22D3EE")),
     ]
 
-    /// 获取当前主题的背景色
+    /// 获取当前主题的背景色（跟随新的暖中性色板）
     var backgroundColor: Color {
-        colorScheme == .dark ? Color(hex: "1A1A2E") : Color(hex: "F8F9FA")
+        colorScheme == .dark ? ColorPalette.backgroundDark : ColorPalette.backgroundLight
     }
 
     /// 获取当前主题的表面色
     var surfaceColor: Color {
-        colorScheme == .dark ? Color(hex: "16213E") : .white
+        colorScheme == .dark ? ColorPalette.surfaceDark : ColorPalette.surfaceLight
     }
 
     /// 获取当前主题的文字色

@@ -13,20 +13,8 @@ struct EnhancedLyricsView: View {
     // 逐字高亮交给 KaraokeLyricLine 单独处理，否则整个列表每秒重绘 10 次。
     @State private var showSearchSheet = false
 
-    /// 滚动偏移（用于算出视口正中是哪一句，支撑拖动定位线）
-    @State private var scrollOffset: CGFloat = 0
-
-    /// 用户是否正在滑动歌词 —— 定位线**只在滑动过程中**出现
-    @State private var isScrubbing = false
-    /// 自动滚动（换句时）期间要忽略偏移变化，否则每换一句都会闪一下定位线
-    @State private var suppressScrubUntil: Date = .distantPast
-    @State private var scrubHideWork: DispatchWorkItem?
-
-    /// 歌词行固定高度 —— 行高统一，才能由「偏移 ÷ 行高」直接算出当前居中的行号
-    /// （留够余量：当前句要放大 1.14 倍，还要容纳翻译行）
+    /// 歌词行固定高度（保证换行时滚动位置稳定）
     private static let lyricRowHeight: CGFloat = 52
-    /// 滚动区域坐标系名
-    private static let scrollSpace = "lyricsScroll"
 
     var body: some View {
         ZStack {
@@ -256,129 +244,30 @@ struct EnhancedLyricsView: View {
             let halfHeight = max(60, geo.size.height / 2 - Self.lyricRowHeight / 2)
 
             ScrollViewReader { proxy in
-                ZStack(alignment: .center) {
-                    ScrollView(.vertical, showsIndicators: false) {
-                        VStack(spacing: 0) {
-                            // 顶部留白，同时作为滚动偏移的探针
-                            Color.clear
-                                .frame(height: halfHeight)
-                                .background(scrollOffsetProbe)
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        Color.clear.frame(height: halfHeight)
 
-                            ForEach(viewModel.displayLyrics) { line in
-                                if !line.text.isEmpty {
-                                    lyricRow(line)
-                                        .frame(height: Self.lyricRowHeight)
-                                        .id(line.index)
-                                }
+                        ForEach(viewModel.displayLyrics) { line in
+                            if !line.text.isEmpty {
+                                lyricRow(line)
+                                    .frame(height: Self.lyricRowHeight)
+                                    .id(line.index)
                             }
-
-                            Color.clear.frame(height: halfHeight)
                         }
-                    }
-                    .coordinateSpace(name: Self.scrollSpace)
-                    .mask(lyricsGradientMask)
-                    .onPreferenceChange(LyricsScrollOffsetKey.self) { offset in
-                        scrollOffset = offset
-                        beginScrubbing()
-                    }
-                    .onChange(of: viewModel.currentLyricIndex) { newIndex in
-                        scrollToCurrent(proxy: proxy, index: newIndex, animated: true)
-                    }
-                    .onAppear {
-                        scrollToCurrent(proxy: proxy, index: viewModel.currentLyricIndex, animated: false)
-                    }
 
-                    // 拖动定位线：手动滑到别处时出现，可以一键跳过去
-                    if let target = scrubTarget {
-                        scrubLine(for: target)
+                        Color.clear.frame(height: halfHeight)
                     }
                 }
-                .animation(.easeInOut(duration: 0.22), value: scrubTarget?.lyricIndex)
+                .mask(lyricsGradientMask)
+                .onChange(of: viewModel.currentLyricIndex) { newIndex in
+                    scrollToCurrent(proxy: proxy, index: newIndex, animated: true)
+                }
+                .onAppear {
+                    scrollToCurrent(proxy: proxy, index: viewModel.currentLyricIndex, animated: false)
+                }
             }
         }
-    }
-
-    /// 测量滚动偏移
-    private var scrollOffsetProbe: some View {
-        GeometryReader { proxy in
-            Color.clear.preference(
-                key: LyricsScrollOffsetKey.self,
-                value: -proxy.frame(in: .named(Self.scrollSpace)).minY
-            )
-        }
-    }
-
-    /// 视口正中那一行（返回 displayLyrics 的下标）
-    ///
-    /// 注意要加回 `displayPaddingLines`：首尾的空白填充行**没有渲染**，
-    /// 所以内容里第一个真正占位的行是 display 下标 5，而不是 0。
-    private var centeredDisplayIndex: Int? {
-        let rows = viewModel.displayLyrics
-        guard !rows.isEmpty else { return nil }
-        let rowInContent = Int((scrollOffset / Self.lyricRowHeight).rounded())
-        let displayIndex = rowInContent + LRCParser.displayPaddingLines
-        return min(max(displayIndex, 0), rows.count - 1)
-    }
-
-    /// 标记「用户正在滑动」，0.8 秒没有新的滚动就自动收起
-    private func beginScrubbing() {
-        // 自动滚动（换句）触发的偏移变化不算用户操作
-        guard Date() >= suppressScrubUntil else { return }
-
-        isScrubbing = true
-
-        scrubHideWork?.cancel()
-        let work = DispatchWorkItem { isScrubbing = false }
-        scrubHideWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: work)
-    }
-
-    /// 定位线要指向的歌词行；没在滑动、或正停在当前播放句上时返回 nil
-    private var scrubTarget: (lyricIndex: Int, time: TimeInterval)? {
-        guard isScrubbing else { return nil }
-        guard let centered = centeredDisplayIndex,
-              centered < viewModel.displayLyrics.count else { return nil }
-
-        let lyricIndex = centered - LRCParser.displayPaddingLines
-        guard lyricIndex >= 0, lyricIndex < viewModel.lyricLines.count else { return nil }
-        if lyricIndex == viewModel.currentLyricIndex { return nil }
-
-        return (lyricIndex, viewModel.lyricLines[lyricIndex].time)
-    }
-
-    /// 拖动定位线：左时间 · 中横线 · 右播放按钮
-    private func scrubLine(for target: (lyricIndex: Int, time: TimeInterval)) -> some View {
-        HStack(spacing: 10) {
-            Text(PlaybackClock.format(target.time))
-                .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                .foregroundColor(.white.opacity(0.85))
-                .frame(width: 44, alignment: .trailing)
-
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [ColorPalette.primary, ColorPalette.primary.opacity(0.35)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .frame(height: 1)
-
-            Button {
-                HapticStyle.medium.trigger()
-                seekToLyric(at: target.lyricIndex)
-            } label: {
-                Image(systemName: "play.fill")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.white)
-                    .frame(width: 28, height: 28)
-                    .background(Circle().fill(ColorPalette.primary))
-                    .shadow(color: ColorPalette.primary.opacity(0.5), radius: 8)
-            }
-            .buttonStyle(BouncyButtonStyle(scale: 0.88))
-        }
-        .padding(.horizontal, 16)
-        .transition(.opacity)
     }
 
     /// 把当前行滚到正中
@@ -386,10 +275,7 @@ struct EnhancedLyricsView: View {
         guard let index = index else { return }
         let target = LRCParser.displayIndex(ofLyricIndex: index)
 
-        // 自动滚动期间不要再把定位线唤出来（它只应该跟随用户的手）
-        suppressScrubUntil = Date().addingTimeInterval(0.7)
-
-        // 行可能还没被 LazyVStack 创建出来，放到下一轮 runloop 再滚
+        // 行可能还没被 VStack 创建出来，放到下一轮 runloop 再滚
         DispatchQueue.main.async {
             if animated {
                 withAnimation(.easeInOut(duration: 0.45)) {
@@ -487,16 +373,6 @@ struct EnhancedLyricsView: View {
         }
     }
 
-}
-
-// MARK: - 滚动偏移探针
-
-/// 把歌词 ScrollView 的滚动偏移往上传
-private struct LyricsScrollOffsetKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
 }
 
 // MARK: - 卡拉OK高亮行

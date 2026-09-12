@@ -39,7 +39,7 @@ struct RecommendView: View {
             }
             .padding(.bottom, 100)
         }
-        .background(Color(hex: "F8F9FA").ignoresSafeArea())
+        .background(ThemeManager.shared.backgroundColor.ignoresSafeArea())
         .sheet(isPresented: $showAPISettings) {
             APISettingsView()
         }

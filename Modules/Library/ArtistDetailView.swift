@@ -23,15 +23,7 @@ struct ArtistDetailView: View {
 
     /// 按歌手名生成稳定的主题色，不同歌手颜色不同
     private var accent: Color {
-        let palette: [Color] = [
-            ColorPalette.primary,
-            Color(hex: "0984E3"),
-            Color(hex: "00B894"),
-            Color(hex: "E17055"),
-            Color(hex: "FD79A8"),
-            Color(hex: "00CEC9"),
-            Color(hex: "A29BFE"),
-        ]
+        let palette = ColorPalette.hues
         let index = abs(artistName.hashValue) % palette.count
         return palette[index]
     }

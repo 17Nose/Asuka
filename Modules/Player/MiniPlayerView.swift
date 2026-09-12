@@ -6,7 +6,6 @@ struct MiniPlayerView: View {
     @State private var showNowPlaying = false
     @State private var isPressed = false
     @State private var miniProgress: CGFloat = 0
-    @State private var coverRotation: Double = 0
 
     var body: some View {
         if let song = viewModel.currentSong {
@@ -113,42 +112,10 @@ struct MiniPlayerView: View {
     // MARK: - 旋转封面
 
     private func rotatingCover(for song: Song) -> some View {
-        Group {
-            if let image = song.coverImage {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Circle()
-                    .fill(ColorPalette.gradientPrimary)
-                    .overlay(
-                        Image(systemName: "music.note")
-                            .foregroundColor(.white.opacity(0.7))
-                            .font(.system(size: 12))
-                    )
-            }
-        }
-        .frame(width: 44, height: 44)
-        .clipShape(Circle())
-        .overlay(
-            Circle()
-                .stroke(Color.white.opacity(0.15), lineWidth: 1.5)
+        RotatingCover(
+            song: song,
+            isPlaying: viewModel.playbackState == .playing
         )
-        .rotationEffect(.degrees(coverRotation))
-        .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
-        .animation(
-            viewModel.playbackState == .playing
-                ? .linear(duration: 8).repeatForever(autoreverses: false)
-                : .easeOut(duration: 0.4),
-            value: viewModel.playbackState
-        )
-        .onChange(of: viewModel.playbackState) { state in
-            if state == .playing {
-                withAnimation(.linear(duration: 8).repeatForever(autoreverses: false)) {
-                    coverRotation += 360
-                }
-            }
-        }
         .onTapGesture { expandPlayer() }
     }
 
@@ -190,6 +157,69 @@ struct MiniPlayerView: View {
     private func expandPlayer() {
         HapticStyle.medium.trigger()
         showNowPlaying = true
+    }
+}
+
+// MARK: - 迷你播放条的旋转封面
+
+/// 唱片封面的缓速旋转
+///
+/// 之前用 `repeatForever` 动画，而且**同时**挂在 `.animation(value:)` 和
+/// `onChange` 里两个地方 —— 两个动画源抢同一属性，表现出来就是「转速时快时慢」。
+///
+/// 改成用 `TimelineView` 按时间直接算角度：
+/// - 转速恒定（每圈 14 秒），不会忽快忽慢
+/// - 暂停时 schedule 自动 paused，一格都不用画
+/// - 暂停瞬间把角度冻结在当前位置，不会有"归零对齐"的跳变
+private struct RotatingCover: View {
+    let song: Song
+    let isPlaying: Bool
+
+    /// 转一圈的秒数（固定值，慢速）
+    private static let secondsPerTurn: Double = 14
+    private static let size: CGFloat = 44
+
+    @State private var frozenAngle: Double = 0
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 20.0, paused: !isPlaying)) { context in
+            cover
+                .rotationEffect(.degrees(isPlaying ? angle(at: context.date) : frozenAngle))
+        }
+        .onChange(of: isPlaying) { playing in
+            if !playing {
+                frozenAngle = angle(at: Date())
+            }
+        }
+    }
+
+    private func angle(at date: Date) -> Double {
+        let turns = date.timeIntervalSinceReferenceDate / Self.secondsPerTurn
+        return (turns * 360).truncatingRemainder(dividingBy: 360)
+    }
+
+    private var cover: some View {
+        Group {
+            if let image = song.coverImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Circle()
+                    .fill(ColorPalette.gradientPrimary)
+                    .overlay(
+                        Image(systemName: "music.note")
+                            .foregroundColor(.white.opacity(0.7))
+                            .font(.system(size: 12))
+                    )
+            }
+        }
+        .frame(width: Self.size, height: Self.size)
+        .clipShape(Circle())
+        .overlay(
+            Circle().stroke(Color.white.opacity(0.15), lineWidth: 1.5)
+        )
+        .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
     }
 }
 
