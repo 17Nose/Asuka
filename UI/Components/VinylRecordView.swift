@@ -58,17 +58,18 @@ struct VinylRecordView: View {
                 .frame(width: size * 0.06, height: size * 0.06)
         }
         .rotationEffect(.degrees(rotationAngle))
-        .animation(
-            isPlaying
-                ? Animation.linear(duration: 10).repeatForever(autoreverses: false)
-                : .easeOut(duration: 0.5),
-            value: isPlaying
-        )
+        // 只由下面的 onChange 驱动旋转。
+        // 之前这里还挂了一个 .animation(value: isPlaying)，和 onChange 里的
+        // withAnimation 双重驱动同一属性，动画会互相打断、看起来一顿一顿的。
         .onChange(of: isPlaying) { newValue in
             if newValue {
-                // 每次播放时从当前位置继续旋转（模拟唱片机）
+                // 从当前角度继续转（模拟唱片机）
                 withAnimation(.linear(duration: 10).repeatForever(autoreverses: false)) {
                     rotationAngle = rotationAngle.truncatingRemainder(dividingBy: 360) + 360
+                }
+            } else {
+                withAnimation(.easeOut(duration: 0.35)) {
+                    rotationAngle = rotationAngle.truncatingRemainder(dividingBy: 360)
                 }
             }
         }

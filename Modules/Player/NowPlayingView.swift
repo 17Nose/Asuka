@@ -8,7 +8,6 @@ struct NowPlayingView: View {
     @State private var showLyrics = false
     @State private var showQueue = false
     @State private var waveformSamples: [CGFloat] = []
-    @State private var coverScale: CGFloat = 1.0
 
     /// 当前页：0 = 播放器，1 = 歌词
     @State private var page: Int = 0
@@ -265,33 +264,15 @@ struct NowPlayingView: View {
 
     private var enhancedAlbumArtSection: some View {
         VStack(spacing: 0) {
+            // 去掉了「播放时封面弹一下」的缩放动画 ——
+            // 封面本身在持续旋转，再叠加缩放会让这块大图层每帧重新合成，
+            // 收益（一点点弹跳）远小于代价
             VinylRecordView(
                 coverImagePath: viewModel.currentSong?.resolvedCoverArtPath,
                 isPlaying: viewModel.playbackState == .playing,
-                size: 280
+                size: 274
             )
-            .scaleEffect(coverScale)
-            .shadow(
-                color: viewModel.playbackState == .playing
-                    ? ColorPalette.primary.opacity(0.3)
-                    : .black.opacity(0.2),
-                radius: viewModel.playbackState == .playing ? 30 : 15,
-                x: 0,
-                y: 10
-            )
-            .animation(.spring(response: 0.5, dampingFraction: 0.7), value: coverScale)
-            .onChange(of: viewModel.playbackState) { state in
-                if state == .playing {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.5)) {
-                        coverScale = 1.05
-                    }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.5)) {
-                            coverScale = 1.0
-                        }
-                    }
-                }
-            }
+            .shadow(color: .black.opacity(0.28), radius: 18, x: 0, y: 10)
         }
     }
 
@@ -386,60 +367,28 @@ struct NowPlayingView: View {
     }
 
     /// 中心播放/暂停按钮（增强版动画）
+    /// 播放 / 暂停
+    ///
+    /// 刻意保持「裸图标」：不加圆形底、不加主题色、不加呼吸光晕。
+    /// 网易云、Apple Music 的播放页也是如此 —— 沉浸式背景上再叠一个实心圆按钮
+    /// 会把画面切碎，也显得廉价。
     private var playPauseButton: some View {
         let isPlaying = viewModel.playbackState == .playing
 
-        return ZStack {
-            // 外层光晕（播放时呼吸）
-            if isPlaying {
-                Circle()
-                    .fill(ColorPalette.primary.opacity(0.2))
-                    .frame(width: 90, height: 90)
-                    .scaleEffect(coverScale == 1.05 ? 1.3 : 1.0)
-                    .animation(
-                        .easeInOut(duration: 1.5).repeatForever(autoreverses: true),
-                        value: coverScale
-                    )
-            }
-
-            // 按钮主体
-            Button(action: {
-                HapticStyle.heavy.trigger()
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.5)) {
-                    coverScale = 0.85
-                }
-                viewModel.togglePlayPause()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.4)) {
-                        coverScale = 1.0
-                    }
-                }
-            }) {
-                ZStack {
-                    Circle()
-                        .fill(Color.white)
-                        .frame(width: 74, height: 74)
-                        .shadow(
-                            color: isPlaying
-                                ? ColorPalette.primary.opacity(0.5)
-                                : Color.black.opacity(0.15),
-                            radius: isPlaying ? 16 : 8,
-                            x: 0,
-                            y: 4
-                        )
-
-                    // 图标切换动画（contentTransition(.symbolEffect) 需 iOS 17+，此处用透明度过渡）
-                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 30, weight: .medium))
-                        .foregroundColor(ColorPalette.primary)
-                        .offset(x: isPlaying ? 0 : 2)
-                        .transition(.opacity)
-                }
-            }
-            .buttonStyle(.plain)
-            .scaleEffect(coverScale)
-            .animation(.spring(response: 0.35, dampingFraction: 0.5), value: coverScale)
+        return Button(action: {
+            HapticStyle.medium.trigger()
+            viewModel.togglePlayPause()
+        }) {
+            Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                .font(.system(size: 38, weight: .medium))
+                .foregroundColor(.white)
+                .shadow(color: .black.opacity(0.3), radius: 8)
+                // 「播放」三角形视觉重心偏左，右移一点点看起来才居中
+                .offset(x: isPlaying ? 0 : 2)
+                .frame(width: 68, height: 68)
+                .contentShape(Rectangle())
         }
+        .buttonStyle(BouncyButtonStyle(scale: 0.88))
     }
 
     // MARK: - 底部操作卡片
@@ -555,32 +504,28 @@ private struct ProgressSection: View {
 
 // MARK: - 控制按钮子组件
 
+/// 播放控制栏里的次要按钮（播放模式 / 上一首 / 下一首 / 音量）
+///
+/// 保持纯白裸图标：不加底、不用主题色，靠图标本身的形态区分状态
+/// （网易云、Apple Music 都是这样，沉浸背景上叠彩色按钮会显得杂乱）
 struct ControlButton: View {
     let systemName: String
     let size: CGFloat
     var isActive: Bool = false
     let action: () -> Void
 
-    @State private var isPressed = false
-
     var body: some View {
         Button(action: {
-            withAnimation(.spring(response: 0.2, dampingFraction: 0.5)) {
-                isPressed = true
-            }
+            HapticStyle.light.trigger()
             action()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                withAnimation(.spring(response: 0.2, dampingFraction: 0.5)) {
-                    isPressed = false
-                }
-            }
         }) {
             Image(systemName: systemName)
                 .font(.system(size: size))
-                .foregroundColor(isActive ? ColorPalette.primary : .white.opacity(0.8))
-                .frame(width: 44, height: 44)
+                .foregroundColor(isActive ? .white : .white.opacity(0.72))
+                .frame(width: 46, height: 46)
+                .contentShape(Rectangle())
         }
-        .scaleEffect(isPressed ? 0.8 : 1.0)
+        .buttonStyle(BouncyButtonStyle(scale: 0.84))
     }
 }
 

@@ -142,8 +142,13 @@ final class PlayerViewModel: ObservableObject {
                     self.playMode = player.playMode
                 }
 
-                // 进度写到独立的 clock，不污染上面的全局刷新
-                self.clock.currentTime = player.currentTime
+                // 进度写到独立的 clock，不污染上面的全局刷新。
+                // 同样必须判重：暂停时 currentTime 不再变化，
+                // 无条件赋值会让进度条和歌词高亮继续每秒重绘 10 次
+                // ——「暂停后依然卡顿」就是这么来的。
+                if self.clock.currentTime != player.currentTime {
+                    self.clock.currentTime = player.currentTime
+                }
                 if self.clock.duration != player.duration {
                     self.clock.duration = player.duration
                 }

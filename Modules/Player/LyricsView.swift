@@ -16,6 +16,12 @@ struct EnhancedLyricsView: View {
     /// 滚动偏移（用于算出视口正中是哪一句，支撑拖动定位线）
     @State private var scrollOffset: CGFloat = 0
 
+    /// 用户是否正在滑动歌词 —— 定位线**只在滑动过程中**出现
+    @State private var isScrubbing = false
+    /// 自动滚动（换句时）期间要忽略偏移变化，否则每换一句都会闪一下定位线
+    @State private var suppressScrubUntil: Date = .distantPast
+    @State private var scrubHideWork: DispatchWorkItem?
+
     /// 歌词行固定高度 —— 行高统一，才能由「偏移 ÷ 行高」直接算出当前居中的行号
     /// （留够余量：当前句要放大 1.14 倍，还要容纳翻译行）
     private static let lyricRowHeight: CGFloat = 52
@@ -273,6 +279,7 @@ struct EnhancedLyricsView: View {
                     .mask(lyricsGradientMask)
                     .onPreferenceChange(LyricsScrollOffsetKey.self) { offset in
                         scrollOffset = offset
+                        beginScrubbing()
                     }
                     .onChange(of: viewModel.currentLyricIndex) { newIndex in
                         scrollToCurrent(proxy: proxy, index: newIndex, animated: true)
@@ -313,8 +320,22 @@ struct EnhancedLyricsView: View {
         return min(max(displayIndex, 0), rows.count - 1)
     }
 
-    /// 定位线要指向的歌词行；正停在当前播放句上时返回 nil（不显示线）
+    /// 标记「用户正在滑动」，0.8 秒没有新的滚动就自动收起
+    private func beginScrubbing() {
+        // 自动滚动（换句）触发的偏移变化不算用户操作
+        guard Date() >= suppressScrubUntil else { return }
+
+        isScrubbing = true
+
+        scrubHideWork?.cancel()
+        let work = DispatchWorkItem { isScrubbing = false }
+        scrubHideWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: work)
+    }
+
+    /// 定位线要指向的歌词行；没在滑动、或正停在当前播放句上时返回 nil
     private var scrubTarget: (lyricIndex: Int, time: TimeInterval)? {
+        guard isScrubbing else { return nil }
         guard let centered = centeredDisplayIndex,
               centered < viewModel.displayLyrics.count else { return nil }
 
@@ -364,6 +385,9 @@ struct EnhancedLyricsView: View {
     private func scrollToCurrent(proxy: ScrollViewProxy, index: Int?, animated: Bool) {
         guard let index = index else { return }
         let target = LRCParser.displayIndex(ofLyricIndex: index)
+
+        // 自动滚动期间不要再把定位线唤出来（它只应该跟随用户的手）
+        suppressScrubUntil = Date().addingTimeInterval(0.7)
 
         // 行可能还没被 LazyVStack 创建出来，放到下一轮 runloop 再滚
         DispatchQueue.main.async {

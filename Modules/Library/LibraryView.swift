@@ -119,23 +119,28 @@ struct LibraryView: View {
             }
         }
         .padding(.horizontal, 6)
-        .padding(.vertical, 5)
+        .padding(.vertical, 4)
         .background(
-            // 液态玻璃质感：毛玻璃底 + 斜向高光描边 + 柔和投影
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
+            // 液态玻璃：毛玻璃底 + 极淡的高光描边 + 很轻的投影。
+            //
+            // 透明度主要靠两层：ultraThinMaterial 已经是最透的材质，
+            // 再叠 .opacity(0.86) 让底下的内容更明显地透上来；
+            // 描边和投影都压到很低，否则会显得是一块"实心面板"。
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .fill(.ultraThinMaterial)
+                .opacity(0.86)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
                         .stroke(
                             LinearGradient(
-                                colors: [.white.opacity(0.5), .white.opacity(0.06)],
+                                colors: [.white.opacity(0.28), .white.opacity(0.03)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
-                            lineWidth: 1
+                            lineWidth: 0.8
                         )
                 )
-                .shadow(color: .black.opacity(0.14), radius: 18, y: 6)
+                .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
         )
         .padding(.horizontal, 16)
         .padding(.bottom, 2)
@@ -619,8 +624,6 @@ struct AlbumCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             coverImage
-                .frame(height: 150)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(albumName)
@@ -639,22 +642,31 @@ struct AlbumCardView: View {
         }
     }
 
-    @ViewBuilder
+    /// 封面固定在「格子宽度的正方形」里
+    ///
+    /// ⚠️ 原来只写 `.frame(height: 150)`，而 `scaledToFill()` 为了填满会**超出**建议尺寸：
+    /// 正方形封面得到 165×165，比例偏宽的封面会撑成 200×150 —— 直接顶出格子，
+    /// 表现就是「有的专辑封面比别的大」。用 `Color.clear` 先占出正方形再叠加图片，
+    /// 尺寸就与图片自身比例无关了。
     private var coverImage: some View {
-        if let path = coverPath,
-           let image = UIImage(contentsOfFile: path) {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-        } else {
-            RoundedRectangle(cornerRadius: 10)
-                .fill(ColorPalette.gradientPrimary.opacity(0.3))
-                .overlay(
-                    Image(systemName: "music.note.list")
-                        .foregroundColor(.white.opacity(0.6))
-                        .font(.system(size: 24))
-                )
-        }
+        Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                if let path = coverPath,
+                   let image = UIImage(contentsOfFile: path) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    ColorPalette.gradientPrimary.opacity(0.3)
+                        .overlay(
+                            Image(systemName: "music.note.list")
+                                .foregroundColor(.white.opacity(0.6))
+                                .font(.system(size: 24))
+                        )
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }
 
