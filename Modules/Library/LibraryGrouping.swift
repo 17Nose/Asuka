@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 // MARK: - 聚合模型
 
@@ -25,6 +26,11 @@ struct ArtistItem: Identifiable {
     let name: String
     let songCount: Int
     let albumCount: Int
+    /// 最早一张专辑的封面，用作歌手头像（没有时回退到首字渐变圆）
+    let coverPath: String?
+    /// 手动放进 Resources/Artists/ 的照片，优先级高于封面
+    var bundledPhoto: UIImage? { ArtistArtwork.bundledPhoto(for: name) }
+
     var id: String { name }
 
     /// "12 首歌 · 3 张专辑"
@@ -63,10 +69,13 @@ enum LibraryGrouping {
     static func artists(from songs: [Song]) -> [ArtistItem] {
         Dictionary(grouping: songs, by: \.groupingArtist)
             .map { name, group in
-                ArtistItem(
+                // 专辑按年份倒序，取最后一张 = 最早那张，通常最像"歌手照片"
+                let earliestCover = albums(from: group).last?.coverPath
+                return ArtistItem(
                     name: name,
                     songCount: group.count,
-                    albumCount: Set(group.map(\.displayAlbum)).count
+                    albumCount: Set(group.map(\.displayAlbum)).count,
+                    coverPath: earliestCover
                 )
             }
             .sorted { lhs, rhs in

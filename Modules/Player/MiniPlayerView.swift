@@ -53,16 +53,17 @@ struct MiniPlayerView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
                 .background(
-                    // 毛玻璃背景
+                    // 毛玻璃背景（和底部标签栏同一档透明度，保持一致）
                     RoundedRectangle(cornerRadius: 16)
-                        .fill(.regularMaterial)
+                        .fill(.ultraThinMaterial)
+                        .opacity(0.72)
                         .overlay(
                             RoundedRectangle(cornerRadius: 16)
                                 .stroke(
                                     LinearGradient(
                                         colors: [
-                                            Color.white.opacity(0.3),
-                                            Color.white.opacity(0.05)
+                                            Color.white.opacity(0.22),
+                                            Color.white.opacity(0.03)
                                         ],
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing

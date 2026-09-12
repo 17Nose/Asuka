@@ -21,6 +21,10 @@ targets:
       - path: Resources/Music
         type: folder
         buildPhase: resources
+      # 歌手头像照片（可选放入，App 内按 Bundle/Resources/Artists 查找）
+      - path: Resources/Artists
+        type: folder
+        buildPhase: resources
 
     # 显式生成 Info.plist（INFOPLIST_KEY_* 只支持 Xcode 预定义的键，
     # UIFileSharingEnabled 这类自定义键必须走 info.properties）

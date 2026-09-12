@@ -55,26 +55,58 @@ struct ArtistDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
+    // MARK: - 歌手头像
+
+    /// 大头像
+    ///
+    /// 三级来源（详见 `ArtistArtwork`）：
+    /// 1. 你手动放进 `Resources/Artists/` 的照片
+    /// 2. 该歌手**最早一张专辑**的封面 —— 周杰伦就是《Jay》那张，本身就有人像，
+    ///    比顶一个「周」字自然得多
+    /// 3. 都没有才回退到「首字 + 渐变圆」
+    @ViewBuilder
+    private var avatar: some View {
+        let side: CGFloat = 148
+
+        Group {
+            if let photo = ArtistArtwork.bundledPhoto(for: artistName) {
+                Image(uiImage: photo)
+                    .resizable()
+                    .scaledToFill()
+            } else if let path = representativeCoverPath,
+                      let cover = UIImage(contentsOfFile: path) {
+                Image(uiImage: cover)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                LinearGradient(
+                    colors: [accent, accent.opacity(0.55)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .overlay(
+                    Text(String(artistName.prefix(1)))
+                        .font(.system(size: 62, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                )
+            }
+        }
+        .frame(width: side, height: side)
+        .clipShape(Circle())
+        .overlay(Circle().stroke(.white.opacity(0.18), lineWidth: 1))
+        .shadow(color: .black.opacity(0.22), radius: 18, y: 10)
+    }
+
+    /// 代表封面：专辑按年份倒序排列，取最后一张 = 最早那张
+    private var representativeCoverPath: String? {
+        albums.last?.coverPath
+    }
+
     // MARK: - 头部
 
     private var header: some View {
         VStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [accent, accent.opacity(0.55)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 148, height: 148)
-                    .shadow(color: accent.opacity(0.35), radius: 22, y: 10)
-
-                Text(String(artistName.prefix(1)))
-                    .font(.system(size: 62, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
-            }
+            avatar
 
             VStack(spacing: 6) {
                 Text(artistName)

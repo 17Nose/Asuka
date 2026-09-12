@@ -129,26 +129,26 @@ struct LibraryView: View {
         .padding(.horizontal, 6)
         .padding(.vertical, 4)
         .background(
-            // 液态玻璃：毛玻璃底 + 极淡的高光描边 + 很轻的投影。
+            // 液态玻璃：毛玻璃底 + 极淡高光描边 + 很轻的投影。
             //
-            // 透明度主要靠两层：ultraThinMaterial 已经是最透的材质，
-            // 再叠 .opacity(0.86) 让底下的内容更明显地透上来；
-            // 描边和投影都压到很低，否则会显得是一块"实心面板"。
+            // `.ultraThinMaterial` 是 iOS 16 系统材质里最透的一档，
+            // 再叠 .opacity(0.68) 让底下的内容明显透上来。
+            // 描边和投影都压得很低 —— 它们才是让玻璃显得"实"的主因。
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .fill(.ultraThinMaterial)
-                .opacity(0.86)
+                .opacity(0.68)
                 .overlay(
                     RoundedRectangle(cornerRadius: 28, style: .continuous)
                         .stroke(
                             LinearGradient(
-                                colors: [.white.opacity(0.28), .white.opacity(0.03)],
+                                colors: [.white.opacity(0.22), .white.opacity(0.02)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
-                            lineWidth: 0.8
+                            lineWidth: 0.7
                         )
                 )
-                .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
+                .shadow(color: .black.opacity(0.05), radius: 8, y: 3)
         )
         .padding(.horizontal, 16)
         .padding(.bottom, 2)
@@ -336,34 +336,33 @@ struct LibraryView: View {
 
     // MARK: - Tab 内容
 
-    @ViewBuilder
+    /// 用分页 TabView 承载四个标签页 —— 支持**左右滑动切换**（Apple Music 的手感）
+    ///
+    /// 之前是 `switch selectedTab` 手写切换，只能点、不能滑。
+    /// 换成 `.page` 样式后，滑动和点击共用同一个 `selectedTab`，双向同步。
+    /// 每页内部仍是各自的 List / ScrollView，纵向滚动与横向翻页互不冲突。
     private var tabContent: some View {
-        switch selectedTab {
+        TabView(selection: $selectedTab) {
+            ForEach(LibraryTab.allCases, id: \.self) { tab in
+                pageContent(for: tab)
+                    .tag(tab)
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+    }
+
+    @ViewBuilder
+    private func pageContent(for tab: LibraryTab) -> some View {
+        switch tab {
         case .recommend:
             RecommendView()
                 .environmentObject(viewModel)
-                .transition(.asymmetric(
-                    insertion: .move(edge: .trailing).combined(with: .opacity),
-                    removal: .move(edge: .leading).combined(with: .opacity)
-                ))
         case .songs:
             SongListView(songs: viewModel.allSongs)
-                .transition(.asymmetric(
-                    insertion: .move(edge: .leading).combined(with: .opacity),
-                    removal: .move(edge: .trailing).combined(with: .opacity)
-                ))
         case .albums:
             albumGridView
-                .transition(.asymmetric(
-                    insertion: .move(edge: .leading).combined(with: .opacity),
-                    removal: .move(edge: .trailing).combined(with: .opacity)
-                ))
         case .artists:
             artistListView
-                .transition(.asymmetric(
-                    insertion: .move(edge: .leading).combined(with: .opacity),
-                    removal: .move(edge: .trailing).combined(with: .opacity)
-                ))
         }
     }
 
@@ -425,7 +424,9 @@ struct LibraryView: View {
                             ArtistRowView(
                                 artist: item.name,
                                 songCount: item.songCount,
-                                index: index
+                                index: index,
+                                bundledPhoto: item.bundledPhoto,
+                                coverPath: item.coverPath
                             )
                         }
                         .listRowBackground(Color.clear)
@@ -567,28 +568,13 @@ struct ArtistRowView: View {
     let artist: String
     let songCount: Int
     let index: Int
+    /// 歌手头像：优先包内照片，其次最早一张专辑的封面，都没有才用首字渐变圆
+    var bundledPhoto: UIImage? = nil
+    var coverPath: String? = nil
 
     var body: some View {
         HStack(spacing: 14) {
-            // 头像（渐变背景 + 首字母）
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                hueColor.opacity(0.7),
-                                hueColor.opacity(0.4)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 44, height: 44)
-
-                Text(String(artist.prefix(1)))
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
-            }
+            avatar
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(artist)
@@ -604,6 +590,38 @@ struct ArtistRowView: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 4)
+    }
+
+    @ViewBuilder
+    private var avatar: some View {
+        let side: CGFloat = 44
+
+        Group {
+            if let photo = bundledPhoto {
+                Image(uiImage: photo)
+                    .resizable()
+                    .scaledToFill()
+            } else if let path = coverPath,
+                      let cover = UIImage(contentsOfFile: path) {
+                Image(uiImage: cover)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                LinearGradient(
+                    colors: [hueColor.opacity(0.75), hueColor.opacity(0.45)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .overlay(
+                    Text(String(artist.prefix(1)))
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                )
+            }
+        }
+        .frame(width: side, height: side)
+        .clipShape(Circle())
+        .overlay(Circle().stroke(.white.opacity(0.15), lineWidth: 1))
     }
 
     /// 根据索引取色（统一走 ColorPalette.hues 的撞色组）
