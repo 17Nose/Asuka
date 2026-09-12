@@ -87,8 +87,16 @@ struct LibraryView: View {
         .animation(.easeInOut(duration: 0.3), value: viewModel.isScanning)
     }
 
-    // MARK: - 底部悬浮标签栏（液态玻璃）
+    // MARK: - 底部标签栏
 
+    /// 只有图标，**没有底板**
+    ///
+    /// 之前给它套了一层 `.ultraThinMaterial` 玻璃。问题是：
+    /// 浅色模式下这个材质渲染出来就是一片浅白，压在本就偏白的页面背景上，
+    /// 看起来不是"玻璃"而是"一块白色面板占了一行"。
+    ///
+    /// 去掉底板后图标直接浮在内容上 —— 这也是 Apple Music、网易云的做法。
+    /// 为了保证压在专辑封面上也看得清，给图标加一层很淡的阴影做描边感。
     private var floatingTabBar: some View {
         HStack(spacing: 2) {
             ForEach(LibraryTab.allCases, id: \.self) { tab in
@@ -111,13 +119,14 @@ struct LibraryView: View {
                             .font(.system(size: 10, weight: .medium))
                     }
                     .foregroundColor(selectedTab == tab ? ColorPalette.primary : theme.textSecondary)
+                    .shadow(color: theme.backgroundColor.opacity(0.6), radius: 4)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 7)
+                    .padding(.vertical, 6)
                     .background(
                         Group {
                             if selectedTab == tab {
                                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(ColorPalette.primary.opacity(0.14))
+                                    .fill(ColorPalette.primary.opacity(0.12))
                             }
                         }
                     )
@@ -126,30 +135,6 @@ struct LibraryView: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 4)
-        .background(
-            // 液态玻璃：毛玻璃底 + 极淡高光描边 + 很轻的投影。
-            //
-            // `.ultraThinMaterial` 是 iOS 16 系统材质里最透的一档，
-            // 再叠 .opacity(0.68) 让底下的内容明显透上来。
-            // 描边和投影都压得很低 —— 它们才是让玻璃显得"实"的主因。
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .opacity(0.68)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .stroke(
-                            LinearGradient(
-                                colors: [.white.opacity(0.22), .white.opacity(0.02)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 0.7
-                        )
-                )
-                .shadow(color: .black.opacity(0.05), radius: 8, y: 3)
-        )
         .padding(.horizontal, 16)
         .padding(.bottom, 2)
     }
