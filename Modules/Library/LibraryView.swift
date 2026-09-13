@@ -137,24 +137,17 @@ struct LibraryView: View {
             }
         }
         .padding(.horizontal, 6)
-        .padding(.vertical, 4)
+        .padding(.vertical, 3)
         .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
                 .fill(.ultraThinMaterial)
-                // 0.86 → 0.60：只动这一项，让它真正"透"起来
-                .opacity(0.60)
+                // 0.86 → 0.40：材质本身压到很淡，让身后内容透上来
+                .opacity(0.40)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .stroke(
-                            LinearGradient(
-                                colors: [.white.opacity(0.28), .white.opacity(0.03)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 0.8
-                        )
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .stroke(.white.opacity(0.16), lineWidth: 0.6)
                 )
-                .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
+                .shadow(color: .black.opacity(0.05), radius: 8, y: 3)
         )
         .padding(.horizontal, 16)
         .padding(.bottom, 2)
@@ -175,7 +168,7 @@ struct LibraryView: View {
         // 才是 Apple Music 那种「玻璃浮在内容上」的感觉。
         // 之前是用 Spacer 在布局里硬留一行，玻璃下面什么都没有，看起来就是块实心条。
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            Color.clear.frame(height: 116)
+            Color.clear.frame(height: 108)
         }
     }
 
