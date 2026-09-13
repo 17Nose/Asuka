@@ -6,7 +6,8 @@ struct LibraryView: View {
     @EnvironmentObject var viewModel: PlayerViewModel
     @ObservedObject var theme = ThemeManager.shared
     @State private var selectedTab: LibraryTab = .recommend
-    @State private var isSearching = false
+    /// 是否展示独立搜索页
+    @State private var showSearch = false
     @State private var showScanAnimation = false
     @State private var showImporter = false
     /// 导航栈路径 —— 需要一个可清空的引用，底部标签栏才能「一键回到根」
@@ -55,6 +56,11 @@ struct LibraryView: View {
                     ) { result in
                         handleImport(result)
                     }
+                    // 独立搜索页（带搜索历史与取消按钮）
+                    .fullScreenCover(isPresented: $showSearch) {
+                        SearchView()
+                            .environmentObject(viewModel)
+                    }
                     .alert("导入完成", isPresented: Binding(
                         get: { importResultMessage != nil },
                         set: { if !$0 { importResultMessage = nil } }
@@ -83,7 +89,6 @@ struct LibraryView: View {
             }
             .zIndex(5)
         }
-        .animation(.easeInOut(duration: 0.3), value: isSearching)
         .animation(.easeInOut(duration: 0.3), value: viewModel.isScanning)
     }
 
@@ -146,12 +151,7 @@ struct LibraryView: View {
             headerBar
 
             // 内容区
-            if isSearching && !viewModel.searchQuery.isEmpty {
-                SongListView(songs: viewModel.searchResults)
-                    .transition(.opacity.combined(with: .move(edge: .trailing)))
-            } else {
-                tabContent
-            }
+            tabContent
         }
         // 关键：内容**铺满整个屏幕高度**，只在可滚动区域底部加一段内边距。
         //
@@ -247,40 +247,28 @@ struct LibraryView: View {
 
     // MARK: - 搜索栏（增强动画）
 
+    /// 首页的搜索入口 —— 是**按钮**，不是输入框
+    ///
+    /// 之前这里直接放 `TextField`，但 `.onTapGesture` 挂在 TextField 上不生效
+    /// （TextField 自己会吞掉点击去获取焦点），导致「取消」按钮永远不出现，
+    /// 点进去就卡在键盘界面、只能靠回车退出。
+    ///
+    /// 改成按钮后：点一下整页跳到 `SearchView`，那里有真正的输入框和取消。
     private var searchBar: some View {
-        HStack(spacing: 10) {
+        Button {
+            HapticStyle.light.trigger()
+            showSearch = true
+        } label: {
             HStack(spacing: 8) {
-                // 搜索图标（旋转动画）
                 Image(systemName: "magnifyingglass")
-                    .foregroundColor(.secondary)
-                    .rotationEffect(.degrees(isSearching ? 0 : 0))
-                    .scaleEffect(isSearching ? 0.9 : 1.0)
-
-                TextField("搜索歌曲、歌手、专辑...", text: $viewModel.searchQuery)
-                    .textFieldStyle(.plain)
                     .font(.system(size: 15))
-                    .onSubmit { viewModel.search() }
-                    .onChange(of: viewModel.searchQuery) { _ in
-                        viewModel.search()
-                    }
-                    .onTapGesture {
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                            isSearching = true
-                        }
-                    }
+                    .foregroundColor(.secondary)
 
-                if !viewModel.searchQuery.isEmpty {
-                    Button(action: {
-                        HapticStyle.light.trigger()
-                        viewModel.searchQuery = ""
-                        viewModel.searchResults = []
-                    }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
-                            .font(.system(size: 15))
-                    }
-                    .transition(.scale.combined(with: .opacity))
-                }
+                Text("搜索歌曲、歌手、专辑")
+                    .font(.system(size: 15))
+                    .foregroundColor(.secondary)
+
+                Spacer(minLength: 0)
             }
             .padding(12)
             .background(
@@ -290,33 +278,12 @@ struct LibraryView: View {
                         RoundedRectangle(cornerRadius: 14)
                             .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
                     )
-                    .shadow(
-                        color: .black.opacity(isSearching ? 0.08 : 0.03),
-                        radius: isSearching ? 8 : 4,
-                        x: 0,
-                        y: 2
-                    )
+                    .shadow(color: .black.opacity(0.03), radius: 4, x: 0, y: 2)
             )
-
-            // 取消按钮（弹性出现）
-            if isSearching {
-                Button("取消") {
-                    HapticStyle.selection.trigger()
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                        isSearching = false
-                        viewModel.searchQuery = ""
-                        viewModel.searchResults = []
-                        UIApplication.shared.sendAction(
-                            #selector(UIResponder.resignFirstResponder),
-                            to: nil, from: nil, for: nil
-                        )
-                    }
-                }
-                .font(.system(size: 15, weight: .medium))
-                .foregroundColor(ColorPalette.primary)
-                .transition(.move(edge: .trailing).combined(with: .opacity))
-            }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("搜索")
     }
 
     // MARK: - Tab 内容

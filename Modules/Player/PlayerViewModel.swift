@@ -338,6 +338,20 @@ final class PlayerViewModel: ObservableObject {
 
     // MARK: - 搜索
 
+    /// 按关键词搜索（搜索页直接调用，不依赖 `searchQuery` 这个 UI 状态）
+    ///
+    /// 优先 FTS5 全文索引；没命中时退回 LIKE 模糊匹配
+    /// —— 本地曲库只有几百首，LIKE 完全够快，而 FTS 对中文分词不稳。
+    func performSearch(_ text: String) -> [Song] {
+        let keyword = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let repo = repository, !keyword.isEmpty else { return [] }
+
+        if let results = try? repo.search(keyword), !results.isEmpty {
+            return results
+        }
+        return (try? repo.simpleSearch(keyword)) ?? []
+    }
+
     func search() {
         guard let repo = repository, !searchQuery.isEmpty else {
             searchResults = []

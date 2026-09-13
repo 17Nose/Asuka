@@ -52,6 +52,9 @@ struct SongListView: View {
                 }
             }
             .listStyle(.plain)
+            // 隐藏 List 的系统白底，否则浅色模式下这一整块是白的，
+            // 和页面的暖白背景对不上 —— 看起来就是"铺了一层白"
+            .scrollContentBackground(.hidden)
         }
     }
 }
