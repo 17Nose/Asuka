@@ -94,14 +94,11 @@ struct LibraryView: View {
 
     // MARK: - 底部标签栏
 
-    /// 只有图标，**没有底板**
+    /// 悬浮玻璃标签栏
     ///
-    /// 之前给它套了一层 `.ultraThinMaterial` 玻璃。问题是：
-    /// 浅色模式下这个材质渲染出来就是一片浅白，压在本就偏白的页面背景上，
-    /// 看起来不是"玻璃"而是"一块白色面板占了一行"。
-    ///
-    /// 去掉底板后图标直接浮在内容上 —— 这也是 Apple Music、网易云的做法。
-    /// 为了保证压在专辑封面上也看得清，给图标加一层很淡的阴影做描边感。
+    /// 参数沿用「比 0.86 更透」的方向：材质不透明度压到 0.60、
+    /// 高光描边 0.28、阴影 0.08/半径 10 保持不变 —— 你反馈这套观感是对的，
+    /// 之前只是**材质本身**不够透，不该把整块底板删掉。
     private var floatingTabBar: some View {
         HStack(spacing: 2) {
             ForEach(LibraryTab.allCases, id: \.self) { tab in
@@ -124,14 +121,13 @@ struct LibraryView: View {
                             .font(.system(size: 10, weight: .medium))
                     }
                     .foregroundColor(selectedTab == tab ? ColorPalette.primary : theme.textSecondary)
-                    .shadow(color: theme.backgroundColor.opacity(0.6), radius: 4)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 7)
                     .background(
                         Group {
                             if selectedTab == tab {
                                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(ColorPalette.primary.opacity(0.12))
+                                    .fill(ColorPalette.primary.opacity(0.14))
                             }
                         }
                     )
@@ -140,6 +136,26 @@ struct LibraryView: View {
                 .buttonStyle(.plain)
             }
         }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(.ultraThinMaterial)
+                // 0.86 → 0.60：只动这一项，让它真正"透"起来
+                .opacity(0.60)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .stroke(
+                            LinearGradient(
+                                colors: [.white.opacity(0.28), .white.opacity(0.03)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 0.8
+                        )
+                )
+                .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
+        )
         .padding(.horizontal, 16)
         .padding(.bottom, 2)
     }

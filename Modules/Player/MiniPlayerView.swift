@@ -53,30 +53,29 @@ struct MiniPlayerView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
                 .background(
-                    // 毛玻璃背景（和底部标签栏同一档透明度，保持一致）
+                    // 毛玻璃背景。比标签栏略实一点点（0.68 vs 0.60）——
+                    // 这条上有封面缩略图和歌名，太透会影响可读性。
                     RoundedRectangle(cornerRadius: 16)
                         .fill(.ultraThinMaterial)
-                        .opacity(0.72)
+                        .opacity(0.68)
                         .overlay(
                             RoundedRectangle(cornerRadius: 16)
                                 .stroke(
                                     LinearGradient(
                                         colors: [
-                                            Color.white.opacity(0.22),
+                                            Color.white.opacity(0.28),
                                             Color.white.opacity(0.03)
                                         ],
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     ),
-                                    lineWidth: 0.5
+                                    lineWidth: 0.8
                                 )
                         )
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 16))
-                .shadow(
-                    color: .black.opacity(0.1),
-                    radius: 8, x: 0, y: -2
-                )
+                // 只在这里加一层阴影，别和背景里那层重复（叠两层会显脏）
+                .shadow(color: .black.opacity(0.08), radius: 10, y: 2)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
             }
